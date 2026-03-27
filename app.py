@@ -52,86 +52,105 @@ if st.session_state.logged_in:
     tenant = get_tenant_data(st.session_state.tenant_id)
     
     if tenant:
-        # --- 2. SIDEBAR NAVIGATION (PROFESSIONAL) ---
-        with st.sidebar:
-            brand_color = tenant.get("theme_color", "#2B3F87")
-            company = tenant.get("company_name", "LendFlow")
+        # --- CLEAN DASHBOARD UI ---
+def render_dashboard(tenant):
+    company = tenant.get("company_name", "LendFlow")
+    currency = tenant.get("currency", "UGX")
 
-            # --- CUSTOM SIDEBAR STYLING ---
-            st.markdown(f"""
-                <style>
-                    section[data-testid="stSidebar"] {{
-                        background-color: #0E1117;
-                        padding-top: 1rem;
-                    }}
-                    .sidebar-header {{
-                        font-size: 20px;
-                        font-weight: 600;
-                        color: white;
-                        margin-bottom: 0.2rem;
-                    }}
-                    .sidebar-sub {{
-                        font-size: 12px;
-                        color: #a2a3b7;
-                        margin-bottom: 1rem;
-                    }}
-                    /* Target the logout button specifically */
-                    div.stButton > button:first-child {{
-                        border-radius: 8px;
-                        border: 1px solid #3d3d4d;
-                        color: #ff4b4b;
-                        background-color: transparent;
-                        transition: all 0.2s ease;
-                    }}
-                    div.stButton > button:first-child:hover {{
-                        background-color: #ff4b4b !important;
-                        color: white !important;
-                        border: 1px solid #ff4b4b;
-                    }}
-                </style>
-            """, unsafe_allow_html=True)
+    # --- GLOBAL STYLING ---
+    st.markdown("""
+    <style>
+        .main {
+            background-color: #F7F9FC;
+        }
 
-            # --- BRANDING ---
-            st.markdown(f"<div class='sidebar-header'>🚀 {company}</div>", unsafe_allow_html=True)
-            st.markdown("<div class='sidebar-sub'>Workspace</div>", unsafe_allow_html=True)
+        .block-container {
+            padding-top: 1.5rem;
+            padding-bottom: 1rem;
+        }
 
-            st.divider()
+        .card {
+            background: white;
+            padding: 18px;
+            border-radius: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
 
-            # --- NAVIGATION ---
-            selected = option_menu(
-                menu_title=None,
-                options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
-                icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
-                default_index=0,
-                styles={
-                    "container": {"padding": "0!important", "background-color": "transparent"},
-                    "icon": {"color": "#a2a3b7", "font-size": "18px"},
-                    "nav-link": {
-                        "font-size": "15px",
-                        "text-align": "left",
-                        "margin": "4px 0px",
-                        "padding": "10px",
-                        "color": "#ffffff",
-                        "--hover-color": "#1c1f2b",
-                    },
-                    "nav-link-selected": {
-                        "background-color": brand_color,
-                        "font-weight": "600",
-                    },
-                }
-            )
+        .metric-title {
+            font-size: 13px;
+            color: #6b7280;
+        }
 
-            st.divider()
+        .metric-value {
+            font-size: 26px;
+            font-weight: 600;
+            color: #111827;
+        }
 
-            # --- USER INFO ---
-            st.markdown("#### 👤 Account")
-            st.caption(st.session_state.get("user_email", "Logged in"))
+        .metric-delta {
+            font-size: 12px;
+            margin-top: 5px;
+        }
 
-            # --- LOGOUT ---
-            if st.button("🚪 Logout", use_container_width=True):
-                st.session_state.clear()
-                st.rerun()
+        .section-title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
+    # --- HEADER ---
+    st.markdown(f"<div class='section-title'>📊 Dashboard</div>", unsafe_allow_html=True)
+
+    # --- METRIC CARDS ---
+    col1, col2, col3, col4 = st.columns(4)
+
+    def metric_card(title, value, delta, positive=True):
+        color = "#16a34a" if positive else "#dc2626"
+        arrow = "↑" if positive else "↓"
+
+        return f"""
+        <div class='card'>
+            <div class='metric-title'>{title}</div>
+            <div class='metric-value'>{value}</div>
+            <div class='metric-delta' style='color:{color}'>
+                {arrow} {delta}
+            </div>
+        </div>
+        """
+
+    with col1:
+        st.markdown(metric_card("Active Loans", "142", "+12%"), unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(metric_card("Total Disbursed", f"{currency} 45M", "+5.4%"), unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(metric_card("Repayment Rate", "94%", "+0.2%"), unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(metric_card("Pending Approvals", "18", "-2", positive=False), unsafe_allow_html=True)
+
+    # --- SPACING ---
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # --- MAIN CONTENT AREA ---
+    colA, colB = st.columns([2, 1])
+
+    with colA:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("### 📈 Performance Overview")
+        st.info("Charts coming next (this will hold your revenue + loan trends).")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with colB:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.markdown("### ⚡ Quick Actions")
+        st.button("➕ New Loan", use_container_width=True)
+        st.button("👤 Add Borrower", use_container_width=True)
+        st.button("💰 Record Payment", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
         # --- ROUTING LOGIC ---
         if selected == "Dashboard":
             render_dashboard(tenant)
