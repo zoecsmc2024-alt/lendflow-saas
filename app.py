@@ -84,13 +84,13 @@ def login_screen():
 
 # --- 4. THE 5-PILLAR ROUTER ---
 def main_interface():
-    # 1. Fetch branding
+    # 1. Fetch branding dynamically
     tenant = conn.table("tenants").select("*").eq("id", st.session_state.tenant_id).single().execute()
     brand_color = tenant.data.get("theme_color", "#2B3F87")
     company = tenant.data.get("company_name", "LendFlow")
 
     # 2. TOP BAR LAYOUT (Company Name + Navigation + Logout)
-    col_logo, col_nav, col_exit = st.columns([1, 4, 1])
+    col_logo, col_nav, col_exit = st.columns([1.5, 4, 1], gap="small")
     
     with col_logo:
         st.markdown(f"<h3 style='color: {brand_color}; margin-top: 5px;'>🚀 {company}</h3>", unsafe_allow_html=True)
@@ -101,54 +101,55 @@ def main_interface():
             options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
             icons=["speedometer2", "briefcase", "cash-stack", "person-badge", "gear"],
             orientation="horizontal",
-            styles={"nav-link-selected": {"background-color": brand_color}}
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent"},
+                "nav-link-selected": {"background-color": brand_color}
+            }
         )
 
     with col_exit:
-        if st.button("🚪 Logout", use_container_width=True):
+        st.write("") # Spacer to align button vertically
+        if st.button("🚪 Logout", key="top_logout", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
 
     st.markdown("---") # Visual separator
 
-    # 3. PAGE ROUTING (Rest of the code stays the same)
-    if selected == "Dashboard":
-        # ... your dashboard code ...
-
-    # PAGE ROUTING
+    # 3. PAGE ROUTING
     if selected == "Dashboard":
         st.title(f"📊 {company} Overview")
         st.info("Coming soon: CEO Metrics & Performance Charts.")
 
     elif selected == "Portfolio":
         st.title("📂 Portfolio Management")
-        t1, t2, t3 = st.tabs(["👥 Borrowers", "📑 Loans", "🛡️ Collateral"])
-        with t1: st.write("### Manage Borrowers")
-        with t2: st.write("### Loan Book")
-        with t3: st.write("### Collateral Tracker")
+        t1, t2, t3 = st.tabs(["👥 Borrowers", "📑 Loans Book", "🛡️ Collateral Vault"])
+        with t1:
+            st.write("### Manage Borrowers")
+            # We'll drop the Borrower Form here next
+        with t2:
+            st.write("### Active Loan Book")
+        with t3:
+            st.write("### Collateral Tracker")
 
     elif selected == "Treasury":
         st.title("💰 Treasury & Cashflow")
         t1, t2, t3 = st.tabs(["📥 Payments", "📤 Expenses", "☕ Petty Cash"])
-        with t1: st.write("### Incoming Payments")
-        with t2: st.write("### Operating Expenses")
-        with t3: st.write("### Daily Petty Cash")
+        with t1:
+            st.write("### Incoming Payments")
+        with t2:
+            st.write("### Operating Expenses")
+        with t3:
+            st.write("### Daily Petty Cash")
 
     elif selected == "Admin":
         st.title("🧾 Admin & Payroll")
         t1, t2, t3 = st.tabs(["👥 Staff", "💸 Payroll", "🏛️ Taxes (URA/NSSF)"])
-        with t1: st.write("### Team Access Control")
+        with t1:
+            st.write("### Team Access Control")
 
     elif selected == "Settings":
-        # We will drop our branding code here
         st.title("⚙️ Workspace Settings")
-
-    # Logout in sidebar
-    with st.sidebar:
-        st.markdown(f"### {company}")
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.logged_in = False
-            st.rerun()
+        # Branding and Rules code will go here
 
 # --- 5. EXECUTION ---
 if not st.session_state.logged_in:
