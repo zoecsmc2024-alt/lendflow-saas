@@ -134,26 +134,17 @@ def render_portfolio(tenant_id):
         section_card("🛡️ Collateral Vault")
         show_empty("Collateral tracking coming soon.")
 
-
 # --- TREASURY ---
 def render_treasury():
     st.title("💰 Treasury & Cashflow")
-
-    tab1, tab2, tab3 = st.tabs([
-        "📥 Payments",
-        "📤 Expenses",
-        "☕ Petty Cash"
-    ])
-
+    tab1, tab2, tab3 = st.tabs(["📥 Payments", "📤 Expenses", "☕ Petty Cash"])
+    
     with tab1:
         show_empty("Payment tracking module coming soon.")
-
     with tab2:
         show_empty("Expense tracking module coming soon.")
-
     with tab3:
         show_empty("Petty cash management coming soon.")
-
 
 # --- ADMIN ---
 def render_admin():
