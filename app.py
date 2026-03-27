@@ -3,146 +3,94 @@ from st_supabase_connection import SupabaseConnection
 from streamlit_option_menu import option_menu
 import pandas as pd
 
-# --- 1. GLOBAL CONFIG ---
-st.set_page_config(
-    page_title="LendFlow Africa",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded" # Keep it open for that 'Admin' feel
-)
+# --- 1. CONFIG ---
+st.set_page_config(page_title="LendFlow Africa", layout="wide", initial_sidebar_state="expanded")
 
-# --- 2. INITIALIZE CONNECTION ---
+# --- 2. CONNECTION ---
 conn = st.connection("supabase", type=SupabaseConnection)
 
 # --- 3. SESSION STATE ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "tenant_id" not in st.session_state:
+    st.session_state.tenant_id = None
 
-# --- 4. STYLING (The "Neatness" Factor) ---
-st.markdown("""
-    <style>
-    /* Main background */
-    .stApp { background-color: #f8f9fa; }
-    
-    /* Card-like containers for metrics */
-    div[data-testid="stMetric"] {
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        border: 1px solid #eee;
-    }
-    
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background-color: #1e1e2d;
-        color: white;
-    }
-    
-    /* Title styling */
-    h1, h2, h3 { font-weight: 700; color: #2d3436; }
-    </style>
-""", unsafe_allow_html=True)
-
-# --- 5. UI HELPERS ---
+# --- 4. DATA HELPER ---
 @st.cache_data(ttl=300)
 def get_tenant_data(tenant_id):
     try:
         res = conn.table("tenants").select("*").eq("id", tenant_id).single().execute()
         return res.data
-    except: return None
+    except:
+        return None
 
-# --- 6. MODULES ---
+# --- 5. PAGE MODULES ---
 def render_dashboard(tenant):
     st.title("📊 Analytics Dashboard")
-    
-    # Metrics Row
     col1, col2, col3, col4 = st.columns(4)
-    currency = tenant.get("currency", "UGX")
-    
-    col1.metric("Users", "6,453", "23.4%")
-    col2.metric("Page Views", "876", "-12.0%")
-    col3.metric("Impressions", "976", "-2.0%")
-    col4.metric("Bounce Rate", "346", "23.4%")
+    col1.metric("Active Loans", "142", "+12%")
+    col2.metric("Total Disbursed", "UGX 45M", "+5.4%")
+    col3.metric("Repayment Rate", "94%", "0.2%")
+    col4.metric("Pending Approvals", "18", "-2")
+    st.divider()
+    st.info("Charts and deeper analytics modules are being integrated.")
 
-    st.markdown("---")
-    
-    # Placeholder for charts (Using standard Streamlit bar charts for now)
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Audience Overview")
-        chart_data = pd.DataFrame([10, 20, 30, 25, 45, 30], columns=["Visitors"])
-        st.bar_chart(chart_data)
-    with c2:
-        st.subheader("Web Traffic")
-        st.line_chart(chart_data)
-
-# --- 7. NAVIGATION & MAIN ---
-def main_interface():
+# --- 6. MAIN APP FLOW ---
+def main_app():
+    # 1. Fetch data safely
     tenant = get_tenant_data(st.session_state.tenant_id)
+    
     if not tenant:
-        st.error("Session expired.")
-        st.session_state.logged_in = False
-        st.rerun()
+        st.error("Account Error: Could not fetch workspace details.")
+        if st.button("Back to Login"):
+            st.session_state.clear()
+            st.rerun()
+        return
 
-    # --- SIDEBAR NAVIGATION ---
-with st.sidebar:
-    # Use a nice div for the logo/title
-    st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
-    st.markdown("---")
-    
-    selected = option_menu(
-        menu_title=None,
-        options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
-        icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
-        menu_icon="cast",
-        default_index=0,
-        styles={
-            "container": {"padding": "0!important", "background-color": "transparent"},
-            "icon": {"color": "#a2a3b7", "font-size": "18px"}, 
-            "nav-link": {
-                "font-size": "16px", 
-                "text-align": "left", 
-                "margin":"5px", 
-                "color": "#ffffff", # Changed to white for better visibility
-                "--hover-color": "#2c2c3d"
-            },
-            # This makes the selected item match your brand color
-            "nav-link-selected": {"background-color": tenant.get("theme_color", "#2B3F87")},
-        }
-    )
-    
-    # Pushes the logout button to the bottom
-    st.markdown("<br>" * 10, unsafe_allow_html=True) 
-    
-    # Custom CSS to make the logout button look like a subtle menu item
-    st.markdown("""
-        <style>
-        div.stButton > button:first-child {
-            background-color: transparent;
-            color: #ff4b4b; /* Reddish logout color */
-            border: 1px solid #3d3d4d;
-            transition: all 0.3s;
-        }
-        div.stButton > button:first-child:hover {
-            background-color: #ff4b4b;
-            color: white;
-            border: 1px solid #ff4b4b;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # 2. Sidebar Navigation
+    with st.sidebar:
+        st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
+        st.markdown("---")
+        
+        selected = option_menu(
+            menu_title=None,
+            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
+            icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
+            default_index=0,
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent"},
+                "icon": {"color": "#a2a3b7", "font-size": "18px"}, 
+                "nav-link": {
+                    "font-size": "16px", "text-align": "left", "margin":"5px", 
+                    "color": "#ffffff", "--hover-color": "#2c2c3d"
+                },
+                "nav-link-selected": {"background-color": tenant.get("theme_color", "#2B3F87")},
+            }
+        )
+        
+        # Logout styling & button
+        st.markdown("<br>" * 10, unsafe_allow_html=True)
+        st.markdown("""<style>
+            div.stButton > button:first-child {
+                background-color: transparent; color: #ff4b4b; border: 1px solid #3d3d4d;
+            }
+            div.stButton > button:first-child:hover {
+                background-color: #ff4b4b; color: white; border: 1px solid #ff4b4b;
+            }
+        </style>""", unsafe_allow_html=True)
 
-    if st.button("🚪 Logout", use_container_width=True):
-        st.session_state.clear()
-        st.rerun()
-    # --- ROUTING ---
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+
+    # 3. Page Routing
     if selected == "Dashboard":
         render_dashboard(tenant)
     else:
         st.title(f"🛠️ {selected}")
-        st.info(f"This section is under construction.")
+        st.info(f"The {selected} module is coming soon.")
 
-# --- 8. LOGIN SYSTEM ---
+# --- 7. LOGIN SCREEN ---
 def login_screen():
     _, col, _ = st.columns([1, 1.5, 1])
     with col:
@@ -153,34 +101,17 @@ def login_screen():
             if st.button("Login", type="primary", use_container_width=True):
                 try:
                     res = conn.table("profiles").select("tenant_id").eq("email", email).execute()
-                    if res.data:
+                    if res.data and len(res.data) > 0:
                         st.session_state.logged_in = True
                         st.session_state.tenant_id = res.data[0]["tenant_id"]
                         st.rerun()
                     else:
-                        st.error("Invalid credentials.")
-                except:
-                    st.error("Connection error.")
+                        st.error("User not found.")
+                except Exception as e:
+                    st.error("Login service unavailable.")
 
-# --- 8. APP ENTRY ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
+# --- 8. EXECUTION ---
 if st.session_state.logged_in:
-    # Fetch tenant only after we know we are logged in
-    tenant = get_tenant_data(st.session_state.tenant_id)
-    
-    if tenant:
-        # NOW you can safely run the sidebar code
-        with st.sidebar:
-            st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
-            # ... rest of your option_menu code ...
-            
-        main_interface() # This runs your dashboard/portfolio etc.
-    else:
-        st.error("Workspace data could not be loaded.")
-        if st.button("Re-login"):
-            st.session_state.clear()
-            st.rerun()
+    main_app()
 else:
     login_screen()
