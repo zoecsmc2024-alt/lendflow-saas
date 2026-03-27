@@ -3,205 +3,147 @@ from st_supabase_connection import SupabaseConnection
 from streamlit_option_menu import option_menu
 import pandas as pd
 
-# --- 1. GLOBAL CONFIG (Must be first) ---
+# --- 1. GLOBAL CONFIG ---
 st.set_page_config(
     page_title="LendFlow Africa",
     page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded" # Keep it open for that 'Admin' feel
 )
 
 # --- 2. INITIALIZE CONNECTION ---
-# Ensure your .streamlit/secrets.toml has [connections.supabase]
 conn = st.connection("supabase", type=SupabaseConnection)
 
-# --- 3. SESSION STATE MANAGEMENT ---
+# --- 3. SESSION STATE ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
-if "tenant_id" not in st.session_state:
-    st.session_state.tenant_id = None
-if "user_email" not in st.session_state:
-    st.session_state.user_email = None
 
-# --- 4. DATA FETCHING ---
+# --- 4. STYLING (The "Neatness" Factor) ---
+st.markdown("""
+    <style>
+    /* Main background */
+    .stApp { background-color: #f8f9fa; }
+    
+    /* Card-like containers for metrics */
+    div[data-testid="stMetric"] {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #eee;
+    }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background-color: #1e1e2d;
+        color: white;
+    }
+    
+    /* Title styling */
+    h1, h2, h3 { font-weight: 700; color: #2d3436; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 5. UI HELPERS ---
 @st.cache_data(ttl=300)
 def get_tenant_data(tenant_id):
     try:
         res = conn.table("tenants").select("*").eq("id", tenant_id).single().execute()
         return res.data
-    except Exception as e:
-        st.error(f"Error fetching tenant: {e}")
-        return None
+    except: return None
 
-# --- 5. MODULES ---
-
+# --- 6. MODULES ---
 def render_dashboard(tenant):
-    company = tenant.get("company_name", "LendFlow")
-    currency = tenant.get("currency", "UGX")
-    st.title(f"📊 {company} Overview")
+    st.title("📊 Analytics Dashboard")
     
+    # Metrics Row
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Loan Book", f"{currency} 0", "+0%")
-    col2.metric("Active Borrowers", "0", "+0")
-    col3.metric("Monthly Revenue", f"{currency} 0", "+0%")
-    col4.metric("Default Rate", "0%", "-0%")
-    st.divider()
-    st.info("ℹ️ Advanced analytics & charts coming soon.")
+    currency = tenant.get("currency", "UGX")
+    
+    col1.metric("Users", "6,453", "23.4%")
+    col2.metric("Page Views", "876", "-12.0%")
+    col3.metric("Impressions", "976", "-2.0%")
+    col4.metric("Bounce Rate", "346", "23.4%")
 
-def render_portfolio(tenant_id):
-    st.title("📂 Portfolio Management")
-    tab1, tab2, tab3 = st.tabs(["👥 Borrowers", "📑 Loans Book", "🛡️ Collateral"])
+    st.markdown("---")
+    
+    # Placeholder for charts (Using standard Streamlit bar charts for now)
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("Audience Overview")
+        chart_data = pd.DataFrame([10, 20, 30, 25, 45, 30], columns=["Visitors"])
+        st.bar_chart(chart_data)
+    with c2:
+        st.subheader("Web Traffic")
+        st.line_chart(chart_data)
 
-    with tab1:
-        col_form, col_list = st.columns([1, 2])
-        with col_form:
-            st.subheader("➕ Add Borrower")
-            with st.form("borrower_form", clear_on_submit=True):
-                name = st.text_input("Full Name")
-                phone = st.text_input("Phone Number")
-                nin = st.text_input("National ID")
-                if st.form_submit_button("Save Borrower", type="primary"):
-                    if name and phone:
-                        try:
-                            conn.table("borrowers").insert({
-                                "tenant_id": tenant_id,
-                                "name": name,
-                                "phone": phone,
-                                "national_id": nin
-                            }).execute()
-                            st.success(f"{name} added!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Save failed: {e}")
-                    else:
-                        st.warning("Name and Phone are required.")
-
-        with col_list:
-            st.subheader("📋 Borrower List")
-            try:
-                res = conn.table("borrowers").select("*").eq("tenant_id", tenant_id).execute()
-                if res.data:
-                    st.dataframe(pd.DataFrame(res.data), use_container_width=True)
-                else:
-                    st.info("No borrowers found.")
-            except:
-                st.error("Could not load borrowers.")
-
-def render_settings(tenant):
-    st.title("⚙️ Workspace Settings")
-    with st.container(border=True):
-        new_name = st.text_input("Company Name", value=tenant.get("company_name"))
-        new_color = st.color_picker("Primary Theme Color", value=tenant.get("theme_color", "#2B3F87"))
-        
-        if st.button("Save Changes", type="primary"):
-            try:
-                conn.table("tenants").update({
-                    "company_name": new_name,
-                    "theme_color": new_color
-                }).eq("id", tenant["id"]).execute()
-                st.cache_data.clear()
-                st.success("Settings updated!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Update failed: {e}")
-
-# --- 6. MAIN INTERFACE ---
+# --- 7. NAVIGATION & MAIN ---
 def main_interface():
     tenant = get_tenant_data(st.session_state.tenant_id)
     if not tenant:
-        st.error("Session Error: Workspace not found.")
-        if st.button("Back to Login"):
-            st.session_state.logged_in = False
-            st.rerun()
-        st.stop()
+        st.error("Session expired.")
+        st.session_state.logged_in = False
+        st.rerun()
 
-    brand_color = tenant.get("theme_color", "#2B3F87")
-    
-    # Custom CSS for Dynamic Branding
-    st.markdown(f"""
-        <style>
-        .stButton>button {{ border-radius: 5px; }}
-        .nav-link-selected {{ background-color: {brand_color} !important; }}
-        </style>
-    """, unsafe_allow_html=True)
-
-    # Top Navigation Bar
-    col_brand, col_nav, col_user = st.columns([1.5, 4, 1])
-    with col_brand:
-        st.markdown(f"### 🚀 {tenant.get('company_name')}")
-    
-    with col_nav:
-        selected = option_menu(
-            None, ["Dashboard", "Portfolio", "Treasury", "Settings"],
-            icons=["speedometer2", "briefcase", "cash-stack", "gear"],
-            orientation="horizontal",
-            styles={"nav-link-selected": {"background-color": brand_color}}
-        )
-
-    with col_user:
-        if st.button("Log Out", use_container_width=True):
-            st.session_state.logged_in = False
-            st.session_state.tenant_id = None
-            st.rerun()
-
-    st.divider()
-
-    if selected == "Dashboard": render_dashboard(tenant)
-    elif selected == "Portfolio": render_portfolio(st.session_state.tenant_id)
-    elif selected == "Settings": render_settings(tenant)
-    else: st.info(f"{selected} module coming soon.")
-
-# --- 7. LOGIN SCREEN ---
-def login_screen():
-    st.markdown("<h1 style='text-align:center;'>LendFlow Africa</h1>", unsafe_allow_html=True)
-    
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
-        tab1, tab2 = st.tabs(["🔐 Login", "🏢 Register Business"])
+    # --- SIDEBAR NAVIGATION ---
+    with st.sidebar:
+        st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
+        st.markdown("---")
         
-        with tab1:
-            email = st.text_input("Email", placeholder="admin@business.com")
+        selected = option_menu(
+            menu_title=None,
+            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
+            icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
+            menu_icon="cast",
+            default_index=0,
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent"},
+                "icon": {"color": "#a2a3b7", "font-size": "18px"}, 
+                "nav-link": {
+                    "font-size": "16px", 
+                    "text-align": "left", 
+                    "margin":"5px", 
+                    "color": "#a2a3b7",
+                    "--hover-color": "#2c2c3d"
+                },
+                "nav-link-selected": {"background-color": tenant.get("theme_color", "#2B3F87")},
+            }
+        )
+        
+        st.spacer = st.container() # Just for spacing
+        st.write("")
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+
+    # --- ROUTING ---
+    if selected == "Dashboard":
+        render_dashboard(tenant)
+    else:
+        st.title(f"🛠️ {selected}")
+        st.info(f"This section is under construction.")
+
+# --- 8. LOGIN SYSTEM ---
+def login_screen():
+    _, col, _ = st.columns([1, 1.5, 1])
+    with col:
+        st.markdown("<h1 style='text-align:center;'>🚀 LendFlow</h1>", unsafe_allow_html=True)
+        with st.container(border=True):
+            email = st.text_input("Email")
             password = st.text_input("Password", type="password")
-            
-            if st.button("Sign In", type="primary", use_container_width=True):
+            if st.button("Login", type="primary", use_container_width=True):
                 try:
-                    # Query profile based on email
                     res = conn.table("profiles").select("tenant_id").eq("email", email).execute()
-                    
-                    if res.data and len(res.data) > 0:
+                    if res.data:
                         st.session_state.logged_in = True
                         st.session_state.tenant_id = res.data[0]["tenant_id"]
-                        st.session_state.user_email = email
-                        st.success("Login Successful!")
                         st.rerun()
                     else:
-                        st.error("Account not found. Please register.")
-                except Exception as e:
-                    st.error(f"Authentication Error: {e}")
+                        st.error("Invalid credentials.")
+                except:
+                    st.error("Connection error.")
 
-        with tab2:
-            with st.form("reg_form"):
-                biz_name = st.text_input("Business Name")
-                admin_email = st.text_input("Admin Email")
-                if st.form_submit_button("Create Workspace", use_container_width=True):
-                    if biz_name and admin_email:
-                        try:
-                            # 1. Create Tenant
-                            t_res = conn.table("tenants").insert({"company_name": biz_name}).execute()
-                            new_id = t_res.data[0]["id"]
-                            # 2. Create Profile
-                            conn.table("profiles").insert({
-                                "tenant_id": new_id, 
-                                "email": admin_email,
-                                "role": "Admin"
-                            }).execute()
-                            st.success("Workspace Created! You can now login.")
-                        except Exception as e:
-                            st.error(f"Registration failed: {e}")
-                    else:
-                        st.warning("Please fill all fields.")
-
-# --- 8. ROUTING ---
+# --- APP START ---
 if st.session_state.logged_in:
     main_interface()
 else:
