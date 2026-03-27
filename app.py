@@ -212,25 +212,7 @@ def main_interface():
     company = tenant.get("company_name", "LendFlow")
 
     # --- SIDEBAR NAVIGATION ---
-    with st.sidebar:
-        st.markdown(f"<div style='font-size: 24px; font-weight: 700; color: {brand_color}; margin-bottom: 20px;'>🚀 {company}</div>", unsafe_allow_html=True)
-        
-        selected = option_menu(
-            menu_title="Main Menu",
-            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
-            icons=["speedometer2", "briefcase", "cash-stack", "person-badge", "gear"],
-            menu_icon="cast",
-            default_index=0,
-            styles={
-                "nav-link-selected": {"background-color": brand_color},
-            }
-        )
-        
-        st.divider()
-        
-        if st.button("Logout", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
+    
 
     # --- ROUTING ---
     # The main area now just displays the content based on sidebar selection
