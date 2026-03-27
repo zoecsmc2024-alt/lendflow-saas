@@ -6,181 +6,332 @@ import pandas as pd
 # --- 1. INITIALIZE CONNECTION ---
 conn = st.connection("supabase", type=SupabaseConnection)
 
-# --- 2. CACHED TENANT FETCH (Fixed) ---
+# --- 2. GLOBAL CONFIG ---
+st.set_page_config(
+    page_title="LendFlow Africa",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# --- 3. CACHED TENANT FETCH ---
 @st.cache_data(ttl=300)
-def get_tenant_data(tenant_id): # Removed 'conn' as a parameter to prevent hashing error
+def get_tenant_data(tenant_id):
     try:
-        response = (
+        res = (
             conn.table("tenants")
             .select("*")
             .eq("id", tenant_id)
             .single()
             .execute()
         )
-        return response.data
-    except Exception as e:
+        return res.data
+    except:
         return None
 
-# --- 3. MODULE FUNCTIONS ---
+
+# --- 4. UI HELPERS ---
+def section_card(title):
+    st.markdown(f"### {title}")
+
+
+def show_empty(message):
+    st.info(f"ℹ️ {message}")
+
+
+# --- 5. MODULES ---
 
 def render_dashboard(tenant):
     company = tenant.get("company_name", "LendFlow")
     currency = tenant.get("currency", "UGX")
+
     st.title(f"📊 {company} Overview")
-    
+
     col1, col2, col3, col4 = st.columns(4)
+
     col1.metric("Total Loan Book", f"{currency} 0", "+0%")
     col2.metric("Active Borrowers", "0", "+0")
     col3.metric("Monthly Revenue", f"{currency} 0", "+0%")
     col4.metric("Default Rate", "0%", "-0%")
-    st.info("📈 CEO Dashboard insights and charts coming soon.")
 
+    st.divider()
+    show_empty("Advanced analytics & charts coming soon.")
+
+
+# --- PORTFOLIO ---
 def render_portfolio(tenant_id):
     st.title("📂 Portfolio Management")
-    t1, t2, t3 = st.tabs(["👥 Borrowers", "📑 Loans Book", "🛡️ Collateral Vault"])
 
-    with t1:
-        st.subheader("Manage Borrowers")
+    tab1, tab2, tab3 = st.tabs([
+        "👥 Borrowers",
+        "📑 Loans Book",
+        "🛡️ Collateral Vault"
+    ])
+
+    # --- BORROWERS ---
+    with tab1:
         col_form, col_list = st.columns([1, 2])
+
+        # FORM
         with col_form:
-            with st.form("add_borrower_form", clear_on_submit=True):
+            section_card("➕ Add Borrower")
+
+            with st.form("borrower_form", clear_on_submit=True):
                 name = st.text_input("Full Name")
                 phone = st.text_input("Phone Number")
-                nin = st.text_input("National ID (NIN)")
-                if st.form_submit_button("Save Borrower", type="primary"):
-                    if name and phone:
-                        conn.table("borrowers").insert({
-                            "tenant_id": tenant_id, "name": name, 
-                            "phone": phone, "national_id": nin
-                        }).execute()
-                        st.toast(f"Saved {name}!", icon="👤")
-                    else:
-                        st.error("Name and Phone are required.")
+                nin = st.text_input("National ID")
+
+                submitted = st.form_submit_button("Save Borrower", type="primary")
+
+                if submitted:
+                    if not name or not phone:
+                        st.error("Name and phone are required.")
+                        return
+
+                    with st.spinner("Saving borrower..."):
+                        try:
+                            conn.table("borrowers").insert({
+                                "tenant_id": tenant_id,
+                                "name": name,
+                                "phone": phone,
+                                "national_id": nin
+                            }).execute()
+
+                            st.success(f"{name} added successfully")
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error("Failed to save borrower.")
+
+        # LIST
         with col_list:
-            data = conn.table("borrowers").select("*").eq("tenant_id", tenant_id).execute()
-            if data.data:
-                st.dataframe(pd.DataFrame(data.data)[['name', 'phone', 'national_id']], use_container_width=True)
+            section_card("📋 Borrower List")
 
-    with t2:
-        st.subheader("Active Loan Book")
-        st.info("Loan tracking and schedules will appear here.")
+            with st.spinner("Loading borrowers..."):
+                try:
+                    res = conn.table("borrowers") \
+                        .select("name, phone, national_id") \
+                        .eq("tenant_id", tenant_id) \
+                        .execute()
 
+                    if res.data:
+                        df = pd.DataFrame(res.data)
+                        st.dataframe(df, use_container_width=True)
+                    else:
+                        show_empty("No borrowers yet.")
+
+                except:
+                    st.error("Failed to load borrowers.")
+
+    # --- LOANS ---
+    with tab2:
+        section_card("📑 Loan Book")
+        show_empty("Loan engine coming next.")
+
+    # --- COLLATERAL ---
+    with tab3:
+        section_card("🛡️ Collateral Vault")
+        show_empty("Collateral tracking coming soon.")
+
+
+# --- TREASURY ---
 def render_treasury():
     st.title("💰 Treasury & Cashflow")
-    t1, t2, t3 = st.tabs(["📥 Payments", "📤 Expenses", "☕ Petty Cash"])
-    with t1: st.info("Record loan repayments.")
 
+    tab1, tab2, tab3 = st.tabs([
+        "📥 Payments",
+        "📤 Expenses",
+        "☕ Petty Cash"
+    ])
+
+    with tab1:
+        show_empty("Payment tracking module coming soon.")
+
+    with tab2:
+        show_empty("Expense tracking module coming soon.")
+
+    with tab3:
+        show_empty("Petty cash management coming soon.")
+
+
+# --- ADMIN ---
 def render_admin():
     st.title("🧾 Admin & Payroll")
-    t1, t2, t3 = st.tabs(["👥 Staff", "💸 Payroll", "🏛️ Taxes (URA/NSSF)"])
-    with t1: st.info("Role-based access control coming soon.")
 
+    tab1, tab2, tab3 = st.tabs([
+        "👥 Staff",
+        "💸 Payroll",
+        "🏛️ Taxes (URA/NSSF)"
+    ])
+
+    with tab1:
+        show_empty("Role-based access control coming soon.")
+
+    with tab2:
+        show_empty("Payroll system coming soon.")
+
+    with tab3:
+        show_empty("Tax integrations coming soon.")
+
+
+# --- SETTINGS ---
 def render_settings(tenant):
     st.title("⚙️ Workspace Settings")
-    with st.container(border=True):
-        st.subheader("Branding")
-        new_name = st.text_input("Primary Name", value=tenant.get("company_name"))
-        new_color = st.color_picker("Primary Color", value=tenant.get("theme_color", "#2B3F87"))
-        if st.button("Save Settings", type="primary"):
-            conn.table("tenants").update({"company_name": new_name, "theme_color": new_color}).eq("id", tenant['id']).execute()
-            st.cache_data.clear() # Clears cache so branding updates immediately
-            st.rerun()
 
-# --- 4. MAIN INTERFACE ---
+    with st.container(border=True):
+        section_card("🎨 Branding")
+
+        new_name = st.text_input("Company Name", value=tenant.get("company_name"))
+        new_color = st.color_picker("Primary Color", value=tenant.get("theme_color", "#2B3F87"))
+
+        if st.button("Save Changes", type="primary"):
+            with st.spinner("Updating settings..."):
+                try:
+                    conn.table("tenants").update({
+                        "company_name": new_name,
+                        "theme_color": new_color
+                    }).eq("id", tenant["id"]).execute()
+
+                    st.cache_data.clear()
+                    st.success("Settings updated successfully.")
+                    st.rerun()
+
+                except:
+                    st.error("Failed to update settings.")
+
+
+# --- 6. MAIN INTERFACE ---
 def main_interface():
     if "tenant_id" not in st.session_state:
         st.error("Session expired. Please log in again.")
         st.stop()
 
     tenant = get_tenant_data(st.session_state.tenant_id)
-    if not tenant: st.stop()
+
+    if not tenant:
+        st.error("Workspace not found.")
+        st.stop()
 
     brand_color = tenant.get("theme_color", "#2B3F87")
     company = tenant.get("company_name", "LendFlow")
 
-    # CUSTOM STYLING
-    st.markdown(f"<style>.company-title {{ color: {brand_color}; font-weight: 600; font-size: 20px; }}</style>", unsafe_allow_html=True)
+    # --- STYLING ---
+    st.markdown(f"""
+        <style>
+        .company-title {{
+            color: {brand_color};
+            font-weight: 600;
+            font-size: 20px;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
 
-    # TOP BAR
-    col_logo, col_nav, col_exit = st.columns([1.5, 4, 1], gap="small")
-    with col_logo:
+    # --- TOP BAR ---
+    col1, col2, col3 = st.columns([1.5, 4, 1])
+
+    with col1:
         st.markdown(f"<div class='company-title'>🚀 {company}</div>", unsafe_allow_html=True)
-    with col_nav:
+
+    with col2:
         selected = option_menu(
-            menu_title=None,
-            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
+            None,
+            ["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
             icons=["speedometer2", "briefcase", "cash-stack", "person-badge", "gear"],
             orientation="horizontal",
             styles={"nav-link-selected": {"background-color": brand_color}}
         )
-    with col_exit:
-        if st.button("🚪 Logout", use_container_width=True):
-            for key in list(st.session_state.keys()): del st.session_state[key]
+
+    with col3:
+        if st.button("Logout", use_container_width=True):
+            st.session_state.clear()
             st.rerun()
 
-    st.markdown("---")
+    st.divider()
 
-    # PAGE ROUTING
-    if selected == "Dashboard": render_dashboard(tenant)
-    elif selected == "Portfolio": render_portfolio(st.session_state.tenant_id)
-    elif selected == "Treasury": render_treasury()
-    elif selected == "Admin": render_admin()
-    elif selected == "Settings": render_settings(tenant)
+    # --- ROUTING ---
+    if selected == "Dashboard":
+        render_dashboard(tenant)
 
-# --- 5. THE PROFESSIONAL GATEKEEPER ---
+    elif selected == "Portfolio":
+        render_portfolio(st.session_state.tenant_id)
+
+    elif selected == "Treasury":
+        render_treasury()
+
+    elif selected == "Admin":
+        render_admin()
+
+    elif selected == "Settings":
+        render_settings(tenant)
+
+
+# --- 7. LOGIN SYSTEM ---
 def login_screen():
-    # Large centered branding
-    st.markdown("<h1 style='text-align: center; color: #2B3F87;'>🚀 LendFlow Africa</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #666;'>The Operating System for Modern Lenders</p>", unsafe_allow_html=True)
-    
+    st.markdown("<h1 style='text-align:center;'>🚀 LendFlow Africa</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>The Operating System for Modern Lenders</p>", unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([1, 2, 1])
-    
+
     with col2:
-        tab_log, tab_reg = st.tabs(["🔐 Staff Login", "🏢 Register Business"])
-        
-        with tab_log:
-            with st.container(border=True):
-                email_in = st.text_input("Work Email", placeholder="name@company.com")
-                pass_in = st.text_input("Password", type="password") # Added password field back
-                
-                col_btn, col_forgot = st.columns([1, 1])
-                with col_btn:
-                    if st.button("Enter Workspace", type="primary", use_container_width=True):
-                        # Verify against profiles table
-                        user = conn.table("profiles").select("tenant_id").eq("email", email_in).execute()
-                        if user.data:
+        tab1, tab2 = st.tabs(["🔐 Login", "🏢 Register"])
+
+        # LOGIN
+        with tab1:
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+
+            if st.button("Login", type="primary", use_container_width=True):
+                with st.spinner("Authenticating..."):
+                    try:
+                        res = conn.table("profiles") \
+                            .select("tenant_id") \
+                            .eq("email", email) \
+                            .execute()
+
+                        if res.data:
                             st.session_state.logged_in = True
-                            st.session_state.tenant_id = user.data[0]['tenant_id']
+                            st.session_state.tenant_id = res.data[0]["tenant_id"]
                             st.rerun()
                         else:
-                            st.error("Invalid email or unauthorized access.")
-                with col_forgot:
-                    st.button("Forgot Password?", use_container_width=True, disabled=True)
+                            st.error("Invalid credentials.")
 
-        with tab_reg:
-            with st.form("register_new_biz", clear_on_submit=True):
-                st.markdown("##### 🏢 Create your Workspace")
-                new_biz = st.text_input("Business Name")
-                admin_email = st.text_input("Admin Email")
-                new_pass = st.text_input("Choose Password", type="password")
-                
-                if st.form_submit_button("Start 14-Day Free Trial", type="primary", use_container_width=True):
-                    if new_biz and admin_email:
-                        # 1. Create Tenant
-                        t_res = conn.table("tenants").insert({"company_name": new_biz}).execute()
-                        t_id = t_res.data[0]['id']
-                        # 2. Create Profile
+                    except:
+                        st.error("Login failed.")
+
+        # REGISTER
+        with tab2:
+            with st.form("register_form"):
+                biz = st.text_input("Business Name")
+                email = st.text_input("Admin Email")
+
+                if st.form_submit_button("Create Workspace", type="primary"):
+                    if not biz or not email:
+                        st.warning("All fields required.")
+                        return
+
+                    try:
+                        tenant = conn.table("tenants").insert({
+                            "company_name": biz
+                        }).execute()
+
+                        t_id = tenant.data[0]["id"]
+
                         conn.table("profiles").insert({
-                            "tenant_id": t_id, 
-                            "email": admin_email, 
+                            "tenant_id": t_id,
+                            "email": email,
                             "role": "Admin"
                         }).execute()
-                        st.success(f"✅ {new_biz} registered! Please log in above.")
-                    else:
-                        st.warning("Please fill in all fields.")
 
-# --- 6. MAIN APP FLOW ---
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    login_screen()
-else:
+                        st.success("Workspace created. Please log in.")
+
+                    except:
+                        st.error("Registration failed.")
+
+
+# --- 8. APP ENTRY ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if st.session_state.logged_in:
     main_interface()
+else:
+    login_screen()
