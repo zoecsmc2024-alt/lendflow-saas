@@ -130,30 +130,77 @@ def render_admin():
     show_empty("Admin module coming soon.")
 
 def render_settings(tenant):
-    st.title("⚙️ Settings")
+    st.title("⚙️ Workspace Settings")
+
+    # --- BRANDING SECTION ---
     with st.container(border=True):
-        new_name = st.text_input("Company Name", value=tenant.get("company_name"))
-        if st.button("Save Changes", type="primary"):
-            conn.table("tenants").update({"company_name": new_name}).eq("id", tenant["id"]).execute()
-            st.cache_data.clear()
-            st.rerun()
+        section_card("🎨 Branding & Identity")
+        
+        col_text, col_logo = st.columns([2, 1])
+        
+        with col_text:
+            new_name = st.text_input("Company Name", value=tenant.get("company_name", "LendFlow"))
+            new_color = st.color_picker("Brand Color", value=tenant.get("theme_color", "#2B3F87"))
+            
+        with col_logo:
+            current_logo = tenant.get("logo_url")
+            if current_logo:
+                st.image(current_logo, caption="Current Logo", width=150)
+            else:
+                st.info("No logo uploaded.")
+
+        # LOGO UPLOAD
+        uploaded_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
+
+        if st.button("Save Workspace Changes", type="primary"):
+            with st.spinner("Updating..."):
+                try:
+                    update_data = {
+                        "company_name": new_name,
+                        "theme_color": new_color
+                    }
+
+                    # If a new file is uploaded, push to Supabase Storage
+                    if uploaded_file:
+                        file_ext = uploaded_file.name.split(".")[-1]
+                        file_path = f"{tenant['id']}/logo.{file_ext}"
+                        
+                        # Upload to 'logos' bucket
+                        conn.upload("logos", file_path, uploaded_file, upsert=True)
+                        
+                        # Get Public URL (Replace 'YOUR_PROJECT_ID' with your actual Supabase project ID)
+                        # Standard Supabase URL format:
+                        project_id = "your-project-id" # Tip: You can grab this from your secrets
+                        public_url = f"https://{project_id}.supabase.co/storage/v1/object/public/logos/{file_path}"
+                        update_data["logo_url"] = public_url
+
+                    # Update Database
+                    conn.table("tenants").update(update_data).eq("id", tenant["id"]).execute()
+                    
+                    st.cache_data.clear()
+                    st.success("Settings updated! Refreshing...")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Update failed: {e}")
 
 # --- 6. MAIN INTERFACE ---
 def main_interface():
-    if "tenant_id" not in st.session_state:
-        st.error("Session expired.")
-        st.stop()
-
+    # ... session checks ...
     tenant = get_tenant_data(st.session_state.tenant_id)
-    if not tenant:
-        st.error("Workspace not found.")
-        st.stop()
-
+    
+    logo_to_show = tenant.get("logo_url")
     brand_color = tenant.get("theme_color", "#2B3F87")
-    company = tenant.get("company_name", "LendFlow")
 
     with st.sidebar:
-        st.markdown(f"<h2 style='color:{brand_color};'>🚀 {company}</h2>", unsafe_allow_html=True)
+        if logo_to_show:
+            st.image(logo_to_show, use_container_width=True)
+        else:
+            # Fallback to a rocket emoji or generic text if no logo exists
+            st.markdown(f"<h2 style='text-align:center;'>🚀</h2>", unsafe_allow_html=True)
+
+        st.markdown(f"<h3 style='text-align:center; color:{brand_color};'>{tenant['company_name']}</h3>", unsafe_allow_html=True)
+        
+        # ... rest of your sidebar code (option_menu, etc.) ...
         selected = option_menu(
             None, ["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
             icons=["grid", "people", "wallet", "shield", "gear"],
