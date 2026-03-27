@@ -84,19 +84,36 @@ def login_screen():
 
 # --- 4. THE 5-PILLAR ROUTER ---
 def main_interface():
-    # Fetch branding dynamically
+    # 1. Fetch branding
     tenant = conn.table("tenants").select("*").eq("id", st.session_state.tenant_id).single().execute()
     brand_color = tenant.data.get("theme_color", "#2B3F87")
     company = tenant.data.get("company_name", "LendFlow")
 
-    # Horizontal Navigation Bar
-    selected = option_menu(
-        menu_title=None,
-        options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
-        icons=["speedometer2", "briefcase", "cash-stack", "person-badge", "gear"],
-        orientation="horizontal",
-        styles={"nav-link-selected": {"background-color": brand_color}}
-    )
+    # 2. TOP BAR LAYOUT (Company Name + Navigation + Logout)
+    col_logo, col_nav, col_exit = st.columns([1, 4, 1])
+    
+    with col_logo:
+        st.markdown(f"<h3 style='color: {brand_color}; margin-top: 5px;'>🚀 {company}</h3>", unsafe_allow_html=True)
+
+    with col_nav:
+        selected = option_menu(
+            menu_title=None,
+            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
+            icons=["speedometer2", "briefcase", "cash-stack", "person-badge", "gear"],
+            orientation="horizontal",
+            styles={"nav-link-selected": {"background-color": brand_color}}
+        )
+
+    with col_exit:
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.logged_in = False
+            st.rerun()
+
+    st.markdown("---") # Visual separator
+
+    # 3. PAGE ROUTING (Rest of the code stays the same)
+    if selected == "Dashboard":
+        # ... your dashboard code ...
 
     # PAGE ROUTING
     if selected == "Dashboard":
