@@ -74,6 +74,7 @@ def render_dashboard(tenant):
             padding: 18px;
             border-radius: 12px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            margin-bottom: 10px;
         }
 
         .metric-title {
@@ -103,13 +104,10 @@ def render_dashboard(tenant):
     # --- HEADER ---
     st.markdown(f"<div class='section-title'>📊 Dashboard</div>", unsafe_allow_html=True)
 
-    # --- METRIC CARDS ---
-    col1, col2, col3, col4 = st.columns(4)
-
+    # --- METRIC CARDS HELPER ---
     def metric_card(title, value, delta, positive=True):
         color = "#16a34a" if positive else "#dc2626"
         arrow = "↑" if positive else "↓"
-
         return f"""
         <div class='card'>
             <div class='metric-title'>{title}</div>
@@ -119,6 +117,9 @@ def render_dashboard(tenant):
             </div>
         </div>
         """
+
+    # --- METRIC CARDS ROW ---
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.markdown(metric_card("Active Loans", "142", "+12%"), unsafe_allow_html=True)
@@ -151,20 +152,23 @@ def render_dashboard(tenant):
         st.button("👤 Add Borrower", use_container_width=True)
         st.button("💰 Record Payment", use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
-        # --- ROUTING LOGIC ---
+
+# --- APP ROUTING LOGIC (Place this in your main execution block) ---
+if st.session_state.logged_in:
+    tenant = get_tenant_data(st.session_state.tenant_id)
+    if tenant:
+        # Sidebar code goes here (as defined in previous step)
+        # ...
+        
         if selected == "Dashboard":
             render_dashboard(tenant)
         elif selected == "Settings":
             render_settings(tenant)
-        # Add other elifs for Portfolio, Treasury, etc.
-else:
-st.error("Could not load tenant data.")
-# 3. Page Routing
-if selected == "Dashboard":
-    render_dashboard(tenant)
-else:
-    st.title(f"🛠️ {selected}")
-    st.info(f"The {selected} module is coming soon.")
+        else:
+            st.title(f"🛠️ {selected}")
+            st.info(f"The {selected} module is coming soon.")
+    else:
+        st.error("Could not load tenant data.")
 
 # --- 7. LOGIN SCREEN ---
 def login_screen():
