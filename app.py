@@ -162,8 +162,25 @@ def login_screen():
                 except:
                     st.error("Connection error.")
 
-# --- APP START ---
+# --- 8. APP ENTRY ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
 if st.session_state.logged_in:
-    main_interface()
+    # Fetch tenant only after we know we are logged in
+    tenant = get_tenant_data(st.session_state.tenant_id)
+    
+    if tenant:
+        # NOW you can safely run the sidebar code
+        with st.sidebar:
+            st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
+            # ... rest of your option_menu code ...
+            
+        main_interface() # This runs your dashboard/portfolio etc.
+    else:
+        st.error("Workspace data could not be loaded.")
+        if st.button("Re-login"):
+            st.session_state.clear()
+            st.rerun()
 else:
     login_screen()
