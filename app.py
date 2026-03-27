@@ -39,24 +39,64 @@ def show_empty(message):
 
 # --- 5. MODULES ---
 def render_dashboard(tenant):
-    # Safety check: if tenant is None, use defaults
-    if not tenant:
-        tenant = {}
-        
     company = tenant.get("company_name", "LendFlow")
     currency = tenant.get("currency", "UGX")
+    brand_color = tenant.get("theme_color", "#2B3F87")
 
     st.title(f"📊 {company} Overview")
-
+    
+    # --- TOP ROW: KPI CARDS ---
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Total Loan Book", f"{currency} 0", "+0%")
-    col2.metric("Active Borrowers", "0", "+0")
-    col3.metric("Monthly Revenue", f"{currency} 0", "+0%")
-    col4.metric("Default Rate", "0%", "-0%")
+    with col1:
+        with st.container(border=True):
+            st.caption("TOTAL LOAN BOOK")
+            st.subheader(f"{currency} 125.4M")
+            st.write("📈 +12% from last month")
 
-    st.divider()
-    show_empty("Advanced analytics & charts coming soon.")
+    with col2:
+        with st.container(border=True):
+            st.caption("ACTIVE BORROWERS")
+            st.subheader("1,240")
+            st.write("👥 +48 new this week")
+
+    with col3:
+        with st.container(border=True):
+            st.caption("REVENUE (INTEREST)")
+            st.subheader(f"{currency} 12.8M")
+            st.write("💰 On track for target")
+
+    with col4:
+        with st.container(border=True):
+            st.caption("PAR @ 30 DAYS")
+            st.subheader("2.4%")
+            st.write("📉 -0.5% improvement")
+
+    st.write("---")
+
+    # --- BOTTOM ROW: TWO COLUMN LAYOUT ---
+    left_col, right_col = st.columns([2, 1])
+
+    with left_col:
+        with st.container(border=True):
+            section_card("📅 Recent Disbursements")
+            # Placeholder for a dataframe or chart
+            mock_data = pd.DataFrame({
+                "Borrower": ["John Doe", "Mary Jane", "Alpha Ltd", "Sarah K."],
+                "Amount": [500000, 1200000, 5000000, 300000],
+                "Status": ["Approved", "Pending", "Approved", "Approved"]
+            })
+            st.tight_layout = True
+            st.dataframe(mock_data, use_container_width=True, hide_index=True)
+
+    with right_col:
+        with st.container(border=True):
+            section_card("🔔 Alerts")
+            st.warning("5 Loans overdue today")
+            st.info("3 Collateral inspections due")
+            st.success("NSSF Returns generated")
+
+    st.button("Download Monthly Report", type="primary")
 
 
 # --- PORTFOLIO ---
