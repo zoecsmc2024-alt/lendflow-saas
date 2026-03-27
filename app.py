@@ -115,3 +115,57 @@ if st.session_state.logged_in:
     main_app()
 else:
     login_screen()
+
+def render_settings(tenant):
+    st.title("⚙️ Workspace Settings")
+    st.markdown("Manage your organization's branding and regional configurations.")
+
+    col_form, col_preview = st.columns([1.5, 1])
+
+    with col_form:
+        with st.container(border=True):
+            st.subheader("🎨 Branding & Identity")
+            
+            # Use columns inside the form for a tighter look
+            new_name = st.text_input("Company Name", value=tenant.get("company_name", "LendFlow"))
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                new_color = st.color_picker("Brand Theme Color", value=tenant.get("theme_color", "#2B3F87"))
+            with c2:
+                new_currency = st.selectbox("Operating Currency", ["UGX", "KES", "USD", "TZS", "NGN"], 
+                                           index=0 if tenant.get("currency") == "UGX" else 1)
+
+            st.divider()
+            
+            if st.button("💾 Save Changes", type="primary", use_container_width=True):
+                with st.spinner("Updating workspace..."):
+                    try:
+                        conn.table("tenants").update({
+                            "company_name": new_name, 
+                            "theme_color": new_color,
+                            "currency": new_currency
+                        }).eq("id", tenant['id']).execute()
+                        
+                        st.cache_data.clear() # Force refresh of the 'get_tenant_data' function
+                        st.toast("Settings updated successfully!", icon="✅")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to update settings: {e}")
+
+    with col_preview:
+        st.subheader("👁️ Live Preview")
+        # Show the user what their sidebar header will look like
+        with st.container(border=True):
+            st.markdown(f"""
+                <div style="background-color: #1e1e2d; padding: 20px; border-radius: 10px;">
+                    <h3 style="color: white; margin: 0;">🚀 {new_name}</h3>
+                    <hr style="border: 0.5px solid #3d3d4d;">
+                    <div style="background-color: {new_color}; color: white; padding: 10px; border-radius: 5px; text-align: center; font-weight: bold;">
+                        Selected Menu Item
+                    </div>
+                </div>
+                <p style="text-align: center; color: gray; font-size: 12px; margin-top: 10px;">
+                    This is how your sidebar will appear to staff.
+                </p>
+            """, unsafe_allow_html=True)
