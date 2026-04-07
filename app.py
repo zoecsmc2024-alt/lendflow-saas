@@ -154,6 +154,8 @@ with st.sidebar:
     # 2. PORTAL SWITCHER
     active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
     active_company = company_list[active_company_name]
+    
+    # Now that active_company is defined, we can apply the theme and logo
     apply_custom_theme(active_company['brand_color'])
     
     st.info(f"📍 Mode: {active_company['name']}")
@@ -178,14 +180,26 @@ with st.sidebar:
     if 'last_page' not in st.session_state:
         st.session_state.last_page = "📈 Overview"
 
-    # Identify which radio was changed
-    current_pages = [page_main, page_ops, page_admin]
-    for p in current_pages:
-        if p != st.session_state.last_page and p in current_pages:
-            st.session_state.last_page = p
-    
-    page = st.session_state.last_page
+    # --- SMART PAGE SWITCHER ---
+    # We use session_state to track which radio was last touched
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "📈 Overview"
 
+    # Define a helper to update the selection
+    def update_page(new_page):
+        st.session_state.current_page = new_page
+
+    # Re-run the navigation selection logic
+    # We check which radio value does NOT match the current state
+    if page_main != st.session_state.current_page and page_main in ["📈 Overview", "🧾 Reports"]:
+        st.session_state.current_page = page_main
+    elif page_ops != st.session_state.current_page and page_ops in ["👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral"]:
+        st.session_state.current_page = page_ops
+    elif page_admin != st.session_state.current_page and page_admin in ["📂 Expenses", "📄 Payroll", "📄 Ledger", "⚙️ Settings"]:
+        st.session_state.current_page = page_admin
+
+    # This is the 'page' variable your switchboard uses below!
+    page = st.session_state.current_page
 if page == "📈 Overview":
     st.title(f"📈 {active_company['name']} | AI Executive Command Center")
 
