@@ -567,22 +567,22 @@ with tab1:
                         hide_index=True
                     )
                 else:
-                    st.info("No transactions found for this borrower.")
+            st.info("No transactions found for this borrower.")
 
-                # --- RISK ALERT ---
-                if t_balance > 0 and t_paid < t_borrowed * 0.3:
-                    st.error("🚨 High Risk Client - Low repayment behavior detected.")
-                elif t_borrowed > 0:
-                    st.success("✅ Client is performing well.")
+        # --- RISK ALERT ---
+        if t_balance > 0 and t_paid < t_borrowed * 0.3:
+            st.error("🚨 High Risk Client - Low repayment behavior detected.")
+        elif t_borrowed > 0:
+            st.success("✅ Client is performing well.")
 
-        else:
-            st.info("No clients found in your database.")
+    else:
+        st.info("No clients found in your database.")
 
-
-
+# --- THE SWITCHBOARD CONTINUES ---
+# This elif MUST align with the original 'if page ==' at the top of the app
 elif page == "💵 Loans":
     st.title(f"💵 {active_company['name']} | Credit Engine")
-
+    # ... rest of your loan code ...
     clients = get_data("clients", active_company['id'])
     loans = get_data("loans", active_company['id'])
 
