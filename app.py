@@ -692,8 +692,11 @@ if page == "💵 Loans":
                     
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ System Error: {str(e)}")
-
+                    # If it's a Supabase error, show the message clearly
+                    if hasattr(e, 'message'):
+                        st.error(f"❌ Database Error: {e.message}")
+                    else:
+                        st.error(f"❌ System Error: {str(e)}")
     # --- 4. TAB 2: LOAN BOOK ---
     with tab2:
         st.markdown("### 📊 Active Loan Portfolio")
