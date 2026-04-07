@@ -530,44 +530,47 @@ elif page == "💵 Loans":
 
         # --- SUBMIT ---
         if st.form_submit_button("💳 Disburse Loan", use_container_width=True):
+            if amt <= 0:
+                st.error("⚠️ Amount must be greater than 0.")
+            else:
+                try:
+                    # 1. Prepare the Data
+                    loan_payload = {
+                        "company_id": active_company['id'],
+                        "client_id": client_id,
+                        "principal_amount": amt,
+                        "interest_rate": rate,
+                        "duration_months": dur,
+                        "total_repayable": total,
+                        "monthly_installment": monthly,
+                        "balance_remaining": total,
+                        "loan_status": "Active"
+                    }
 
-    if amt <= 0:
-        st.error("Amount must be greater than 0.")
-    else:
-        try:
-            loan_payload = {
-                "company_id": active_company['id'],
-                "client_id": client_id,
-                "principal_amount": amt,
-                "interest_rate": rate,
-                "duration_months": dur,
-                "total_repayable": total,
-                "monthly_installment": monthly,
-                "balance_remaining": total,
-                "loan_status": "Active"
-            }
+                    # 2. Push to Supabase
+                    supabase.table("loans").insert(loan_payload).execute()
 
-            supabase.table("loans").insert(loan_payload).execute()
+                    st.success(f"✅ Loan of {amt:,.0f} UGX disbursed to {target}!")
 
-            st.success(f"✅ Loan disbursed to {target}!")
+                    # 3. Handle PDF Generation (Optional - if you have the helper defined)
+                    if 'generate_loan_pdf' in globals():
+                        pdf_file = generate_loan_pdf(
+                            active_company,
+                            target,
+                            loan_payload
+                        )
+                        st.download_button(
+                            label="📥 Download Loan Agreement",
+                            data=pdf_file,
+                            file_name=f"Agreement_{target}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            mime="application/pdf"
+                        )
+                    
+                    # Refresh to show data on dashboard
+                    st.rerun()
 
-            # --- GENERATE PDF ---
-            pdf_file = generate_loan_pdf(
-                active_company,
-                target,
-                loan_payload
-            )
-
-            st.download_button(
-                label="📥 Download Loan Agreement",
-                data=pdf_file,
-                file_name=f"{target}_Loan_Agreement.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
-
-        except Exception as e:
-            st.error("❌ Failed to disburse loan.")
+                except Exception as e:
+                    st.error(f"❌ System Error: {str(e)}")
 
     # --- PORTFOLIO VIEW ---
     st.write("---")
