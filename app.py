@@ -409,35 +409,43 @@ elif page == "👥 Clients":
 
     tab1, tab2 = st.tabs(["➕ Register", "📋 CRM Database"])
 
-    # --- TAB 1: REGISTER ---
-    with tab1:
-        st.markdown("### 🛡️ Client Onboarding")
+   # --- TAB 1: REGISTER ---
+with tab1:
+    st.markdown("### 🛡️ Client Onboarding")
 
-        with st.form("client_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
+    with st.form("client_form", clear_on_submit=True):
+        col1, col2 = st.columns(2)
 
-            f_name = col1.text_input("Full Name / Business Name")
-            id_no = col2.text_input("National ID / Passport No.")
+        # Variables defined here must match the logic below!
+        f_name = col1.text_input("Full Name / Business Name")
+        id_no = col2.text_input("National ID / Passport No.")
 
-            phone = col1.text_input("Phone Number")
-            email = col2.text_input("Email Address")
+        phone = col1.text_input("Phone Number")
+        email = col2.text_input("Email Address")
 
-            if st.form_submit_button("🔐 Register Client", use_container_width=True):
-                if not f_name or not id_no:
-                    st.error("⚠️ Name and ID are required.")
-                else:
+        submit_reg = st.form_submit_button("🙋‍♂️ Register Client")
+
+        if submit_reg:
+            # Check if required fields are empty using the variable names above
+            if not f_name or not id_no:
+                st.error("⚠️ Please fill in all required fields (Name and ID)!")
+            else:
+                try:
+                    # Syncing names: "Database Column": Python Variable
                     supabase.table("clients").insert({
                         "company_id": active_company['id'],
-                        "full_name": f_name.strip(),
-                        "id_number": id_no.strip(),
-                        "phone_number": phone.strip(),
-                        "email": email.strip()
+                        "full_name": f_name,   # Matches f_name above
+                        "national_id": id_no,  # Matches id_no above
+                        "phone": phone,
+                        "email": email
                     }).execute()
+                    
+                    st.success(f"✅ {f_name} has been successfully registered!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"❌ Database Error: {e}")
 
-                    st.success(f"✅ {f_name} registered successfully!")
-                    st.rerun()
-
-    # --- TAB 2: CRM DATABASE ---
+# --- TAB 2: CRM DATABASE ---
     with tab2:
         st.markdown("### 📊 Client Intelligence Dashboard")
 
