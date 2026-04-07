@@ -121,10 +121,14 @@ def log_audit(action, item_name, old_value, new_value):
     }
     supabase.table("audit_log").insert(audit_data).execute()
 
-def calculate_loan(principal, rate, months):
-    interest = float(principal) * (float(rate)/100) * (float(months)/12)
-    total = float(principal) + interest
-    return round(total), round(total/months)
+def calculate_loan(principal, annual_rate, months):
+    # Flat Interest Calculation (Standard for many micro-lenders)
+    # Interest = Principal * (Rate/100) * (Time in years)
+    total_interest = float(principal) * (float(annual_rate) / 100) * (float(months) / 12)
+    total_repayable = float(principal) + total_interest
+    monthly_installment = total_repayable / float(months)
+    
+    return round(total_repayable), round(monthly_installment)
 
 def get_data(table, company_id):
     try:
