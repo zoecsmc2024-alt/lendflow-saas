@@ -13,37 +13,41 @@ if 'theme_color' not in st.session_state:
 def apply_custom_theme(color):
     st.markdown(f"""
         <style>
-        /* This targets the sidebar background */
+        /* Sidebar background */
         [data-testid="stSidebar"] {{
             background-color: {color} !important;
         }}
         
-        /* This makes all sidebar text white so it's readable on the dark blue */
-        [data-testid="stSidebar"] {{
+        /* Make ALL sidebar text white */
+        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
             color: white !important;
         }}
 
-        /* This targets the navigation labels specifically */
-        [data-testid="stSidebarNav"] span {{
+        /* Style the radio button labels specifically */
+        [data-testid="stWidgetLabel"] p {{
             color: white !important;
         }}
 
-        /* This styles the metrics cards on the dashboard */
+        /* Make the "Switch Business Portal" text white */
+        .stSelectbox label p {{
+            color: white !important;
+        }
+
+        /* Metric cards on the main dashboard */
         div[data-testid="stMetric"] {{
             background-color: white;
             padding: 15px;
             border-radius: 10px;
             border-left: 5px solid {color};
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }}
         
-        /* Title color */
+        /* Dashboard titles */
         h1, h2, h3 {{
             color: {color};
         }}
         </style>
     """, unsafe_allow_html=True)
-
 # --- 2. SUPABASE CONNECTION ---
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
