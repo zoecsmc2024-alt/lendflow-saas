@@ -146,34 +146,26 @@ with st.sidebar:
     # 1. THE LOGO (Dynamic)
     if active_company.get('logo_url'):
         st.image(active_company['logo_url'], use_container_width=True)
-    else:
-        st.title("🌍 Peak-Lenders")
     
+    st.info(f"📍 Mode: {active_company['name']}")
     st.write("---")
 
     # 2. PORTAL SWITCHER
     active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
     active_company = company_list[active_company_name]
     
-    # Now that active_company is defined, we can apply the theme and logo
+    # Apply theme
     apply_custom_theme(active_company['brand_color'])
-    
-    st.info(f"📍 Mode: {active_company['name']}")
-    st.write("---")
 
-    # 3. ORGANIZED NAVIGATION
-    # We use headers to create "Sections" in the menu
+    # --- STEP 3: NAVIGATION ---
     st.caption("STRATEGY & GROWTH")
     page_main = st.radio("Strategic", ["📈 Overview", "🧾 Reports"], label_visibility="collapsed")
     
-    st.write("") # Tiny spacer
     st.caption("LOAN OPERATIONS")
     page_ops = st.radio("Ops", ["👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral"], label_visibility="collapsed")
     
-    st.write("") 
     st.caption("BACK OFFICE")
     page_admin = st.radio("Admin", ["📂 Expenses", "📄 Payroll", "📄 Ledger", "⚙️ Settings"], label_visibility="collapsed")
-
     # --- THE MAGIC MERGE ---
     # This logic detects which section you last clicked
     # We use session state to remember the last choice
