@@ -581,7 +581,8 @@ with tab1:
 
 # --- THE SWITCHBOARD CONTINUES ---
 # Ensure this ELIF is back at the far left margin
-elif page == "💵 Loans":
+
+if page == "💵 Loans":
     st.title(f"💵 {active_company['name']} | Credit Engine")
     # ... rest of your loan code ...
     clients = get_data("clients", active_company['id'])
