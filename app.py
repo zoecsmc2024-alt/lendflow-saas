@@ -407,55 +407,57 @@ elif page == "👥 Clients":
         </style>
     """, unsafe_allow_html=True)
 
+    # --- 1. INITIALIZE TABS FIRST ---
     tab1, tab2 = st.tabs(["➕ Register", "📋 CRM Database"])
 
-   # --- TAB 1: REGISTER ---
-with tab1:
-    st.markdown("### 🛡️ Client Onboarding")
+    # --- 2. TAB 1: REGISTER CLIENT ---
+    with tab1:
+        st.markdown("### 🛡️ Client Onboarding")
 
-    with st.form("client_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
+        with st.form("client_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
 
-        # Basic Info - Variables named to match UI
-        f_name = col1.text_input("Full Name / Business Name")
-        id_val = col2.text_input("National ID / Passport No.")
+            # Basic Info - Variables named to match UI
+            f_name = col1.text_input("Full Name / Business Name")
+            id_val = col2.text_input("National ID / Passport No.")
 
-        # Contact Info
-        phone_val = col1.text_input("Phone Number")
-        email_val = col2.text_input("Email Address")
+            # Contact Info
+            phone_val = col1.text_input("Phone Number")
+            email_val = col2.text_input("Email Address")
 
-        # Location & Next of Kin
-        address_val = col1.text_input("Physical Address / Location")
-        nok_val = col2.text_input("Next of Kin (Name & Phone)")
+            # Location & Next of Kin
+            address_val = col1.text_input("Physical Address / Location")
+            nok_val = col2.text_input("Next of Kin (Name & Phone)")
 
-        submit_reg = st.form_submit_button("🙋‍♂️ Register Client")
+            submit_reg = st.form_submit_button("🙋‍♂️ Register Client")
 
-        if submit_reg:
-            # Simple validation
-            if not f_name or not id_val:
-                st.error("⚠️ Name and ID Number are required!")
-            else:
-                try:
-                    # SYNCED: "Supabase Column Name" : Python Variable
-                    supabase.table("clients").insert({
-                        "company_id": active_company['id'],
-                        "full_name": f_name,
-                        "id_number": id_val,      # FIXED: Matches your screenshot
-                        "phone_number": phone_val, # FIXED: Matches your screenshot
-                        "email": email_val,        # Matches your screenshot
-                        "address": address_val,    # FIXED: Matches your screenshot
-                        "next_of_kin": nok_val     # Add this column in Supabase!
-                    }).execute()
-                    
-                    st.success(f"✅ {f_name} has been successfully registered!")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"❌ Database Error: {e}")
+            if submit_reg:
+                # Simple validation
+                if not f_name or not id_val:
+                    st.error("⚠️ Name and ID Number are required!")
+                else:
+                    try:
+                        # SYNCED: "Supabase Column Name" : Python Variable
+                        supabase.table("clients").insert({
+                            "company_id": active_company['id'],
+                            "full_name": f_name,
+                            "id_number": id_val,      # FIXED: Matches your screenshot
+                            "phone_number": phone_val, # FIXED: Matches your screenshot
+                            "email": email_val,        # Matches your screenshot
+                            "address": address_val,    # FIXED: Matches your screenshot
+                            "next_of_kin": nok_val     # Add this column in Supabase!
+                        }).execute()
 
-# --- TAB 2: CRM DATABASE ---
+                        st.success(f"✅ {f_name} has been successfully registered!")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"❌ Database Error: {e}")
+
+    # --- 3. TAB 2: CRM DATABASE ---
     with tab2:
         st.markdown("### 📊 Client Intelligence Dashboard")
 
+        # Fetching client data
         clients = get_data("clients", active_company['id'])
         loans = get_data("loans", active_company['id'])
         payments = get_data("transactions", active_company['id'])
@@ -480,7 +482,7 @@ with tab1:
                 client_id = c['id']
 
                 client_loans = df_loans[df_loans['client_id'] == client_id] if not df_loans.empty else pd.DataFrame()
-                
+
                 # Payment tracking logic
                 if not client_loans.empty and not df_payments.empty:
                     client_payments = df_payments[df_payments['loan_id'].isin(client_loans['id'])]
@@ -546,7 +548,7 @@ with tab1:
 
                 # Pull detailed history for specific client
                 client_loans_det = df_loans[df_loans['client_id'] == selected_id] if not df_loans.empty else pd.DataFrame()
-                
+
                 if not client_loans_det.empty and not df_payments.empty:
                     client_payments_det = df_payments[df_payments['loan_id'].isin(client_loans_det['id'])]
                 else:
@@ -585,6 +587,7 @@ with tab1:
         else:
             # Matches the very first 'if clients:'
             st.info("No clients found in your database.")
+
 
 # --- THE SWITCHBOARD CONTINUES ---
 # Ensure this ELIF is back at the far left margin
