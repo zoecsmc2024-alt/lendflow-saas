@@ -589,10 +589,10 @@ with tab1:
 # --- THE SWITCHBOARD CONTINUES ---
 # Ensure this ELIF is back at the far left margin
 
-if page == "💵 Loans":
+elif page == "💵 Loans":
     st.title(f"💵 {active_company['name']} | Credit Engine")
 
-    # --- 1. INITIALIZE TABS FIRST (Fixes NameError) ---
+    # --- 1. INITIALIZE TABS FIRST ---
     tab1, tab2 = st.tabs(["🚀 Issue New Loan", "📂 Loan Book"])
 
     # --- 2. DATA FETCHING ---
@@ -623,7 +623,6 @@ if page == "💵 Loans":
             dur = col2.number_input("⏳ Duration (Months)", min_value=1, value=6)
 
             # --- LIVE LOAN PREVIEW ---
-            # Assuming calculate_loan returns (total_repayable, monthly_installment)
             total, monthly = calculate_loan(amt, rate, dur)
 
             st.info(f"""
@@ -631,6 +630,11 @@ if page == "💵 Loans":
             - Total Repayable: **{total:,.0f} UGX**
             - Monthly Installment: **{monthly:,.0f} UGX**
             """)
+
+            # --- SUBMIT BUTTON (Logic moved inside the button click) ---
+            submit_disburse = st.form_submit_button("💳 Disburse Loan", use_container_width=True)
+
+        # --- CALCULATIONS & RISK (These must run AFTER the form or be part of the flow) ---
         client_id = c_map[target]
         client_loans = df_loans[df_loans['client_id'] == client_id] if not df_loans.empty else pd.DataFrame()
 
@@ -643,19 +647,14 @@ if page == "💵 Loans":
         c2.metric("📈 After This Loan", f"{total_after:,.0f} UGX")
 
         # --- RISK WARNING ---
-        st.write("---")
-
-        risk_flag = "LOW"
         if current_balance > 0 and total_after > current_balance * 2:
             st.warning("⚠️ High Exposure: This client is doubling their debt.")
-            risk_flag = "MEDIUM"
-
+        
         if current_balance > 0 and total_after > 5000000:
             st.error("🚨 Risk Alert: Client exposure is very high.")
-            risk_flag = "HIGH"
 
-        # --- SUBMIT ---
-        if st.form_submit_button("💳 Disburse Loan", use_container_width=True):
+        # --- PROCESSING THE SUBMISSION ---
+        if submit_disburse:
             if amt <= 0:
                 st.error("⚠️ Amount must be greater than 0.")
             else:
@@ -678,13 +677,9 @@ if page == "💵 Loans":
 
                     st.success(f"✅ Loan of {amt:,.0f} UGX disbursed to {target}!")
 
-                    # 3. Handle PDF Generation (Optional - if you have the helper defined)
+                    # 3. Handle PDF Generation
                     if 'generate_loan_pdf' in globals():
-                        pdf_file = generate_loan_pdf(
-                            active_company,
-                            target,
-                            loan_payload
-                        )
+                        pdf_file = generate_loan_pdf(active_company, target, loan_payload)
                         st.download_button(
                             label="📥 Download Loan Agreement",
                             data=pdf_file,
@@ -692,42 +687,33 @@ if page == "💵 Loans":
                             mime="application/pdf"
                         )
                     
-                    # Refresh to show data on dashboard
                     st.rerun()
-
                 except Exception as e:
                     st.error(f"❌ System Error: {str(e)}")
 
-    # --- PORTFOLIO VIEW ---
-    st.write("---")
-    st.markdown("### 📊 Active Loan Portfolio")
+    # --- 4. TAB 2: LOAN BOOK ---
+    with tab2:
+        st.markdown("### 📊 Active Loan Portfolio")
 
-    if not df_loans.empty:
-        df_loans['principal_amount'] = pd.to_numeric(df_loans['principal_amount'], errors='coerce').fillna(0)
-        df_loans['balance_remaining'] = pd.to_numeric(df_loans['balance_remaining'], errors='coerce').fillna(0)
+        if not df_loans.empty:
+            df_loans['principal_amount'] = pd.to_numeric(df_loans['principal_amount'], errors='coerce').fillna(0)
+            df_loans['balance_remaining'] = pd.to_numeric(df_loans['balance_remaining'], errors='coerce').fillna(0)
 
-        st.dataframe(
-            df_loans[["client_id", "principal_amount", "balance_remaining", "loan_status"]],
-            use_container_width=True,
-            hide_index=True
-        )
+            st.dataframe(
+                df_loans[["client_id", "principal_amount", "balance_remaining", "loan_status"]],
+                use_container_width=True,
+                hide_index=True
+            )
 
-        # --- PORTFOLIO METRICS ---
-        total_portfolio = df_loans['balance_remaining'].sum()
-        avg_loan = df_loans['principal_amount'].mean()
+            # --- PORTFOLIO METRICS ---
+            total_portfolio = df_loans['balance_remaining'].sum()
+            avg_loan = df_loans['principal_amount'].mean()
 
-        p1, p2 = st.columns(2)
-        p1.metric("💼 Total Portfolio", f"{total_portfolio:,.0f} UGX")
-        p2.metric("📌 Avg Loan Size", f"{avg_loan:,.0f} UGX")
-
-    else:
-        st.info("No loans issued yet.")
-
-
-
-
-# --- PAGE LOGIC (Inside your Switchboard) ---
-
+            p1, p2 = st.columns(2)
+            p1.metric("💼 Total Portfolio", f"{total_portfolio:,.0f} UGX")
+            p2.metric("📌 Avg Loan Size", f"{avg_loan:,.0f} UGX")
+        else:
+            st.info("No loans issued yet.")
 elif page == "🛡️ Collateral":
     st.title(f"🛡️ {active_company['name']} | Asset Security Registry")
     
