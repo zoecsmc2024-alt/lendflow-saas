@@ -92,6 +92,35 @@ def generate_loan_pdf(company, client_name, loan_data):
     buffer.seek(0)
     return buffer
 
+# --- HELPER FUNCTIONS (Place these at the top of your app.py) ---
+
+def upload_image(file):
+    """Uploads collateral image to Supabase Storage and returns the public URL."""
+    try:
+        bucket_name = 'collateral-photos'
+        file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
+        
+        # Upload the file
+        supabase.storage.from_(bucket_name).upload(file_name, file.getvalue())
+        
+        # Get public URL
+        res = supabase.storage.from_(bucket_name).get_public_url(file_name)
+        return res
+    except Exception as e:
+        st.error(f"Image upload failed: {str(e)}")
+        return None
+
+def log_audit(action, item_name, old_value, new_value):
+    """Logs system actions to an audit table for security and tracking."""
+    audit_data = {
+        "action": action,
+        "item_name": item_name,
+        "old_value": str(old_value),
+        "new_value": str(new_value),
+        "timestamp": datetime.now().isoformat()
+    }
+    supabase.table("audit_log").insert(audit_data).execute()
+
 def calculate_loan(principal, rate, months):
     interest = float(principal) * (float(rate)/100) * (float(months)/12)
     total = float(principal) + interest
@@ -598,36 +627,9 @@ elif page == "💵 Loans":
         st.info("No loans issued yet.")
 
 
-import streamlit as st
-import supabase
-from datetime import datetime
 
-# Initialize Supabase client (ensure this is set up in your environment)
-supabase = supabase.create_client('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_KEY')
 
-# Function to upload image to Supabase Storage and return the URL
-def upload_image(file):
-    storage = supabase.storage()
-    bucket_name = 'collateral-photos'
-    file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
-    
-    # Upload the file to the Supabase bucket
-    storage.from_(bucket_name).upload(file_name, file)
-    
-    # Get the public URL of the uploaded file
-    file_url = storage.from_(bucket_name).get_public_url(file_name)['publicURL']
-    return file_url
-
-# Function to log actions to the audit log
-def log_audit(action, item_name, old_value, new_value):
-    audit_data = {
-        "action": action,
-        "item_name": item_name,
-        "old_value": old_value,
-        "new_value": new_value,
-        "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    supabase.table("audit_log").insert(audit_data).execute()
+# --- PAGE LOGIC (Inside your Switchboard) ---
 
 elif page == "🛡️ Collateral":
     st.title(f"🛡️ {active_company['name']} | Asset Security Registry")
@@ -638,54 +640,43 @@ elif page == "🛡️ Collateral":
     if not loans_res.data:
         st.info("No active loans require collateral logging at this time.")
     else:
-        # Collateral Registration Form
+        # --- REGISTRATION FORM ---
         with st.expander("📝 Register New Collateral Item", expanded=True):
             with st.form("collateral_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 
-                # Map loan description to ID
                 loan_map = {f"{l['clients']['full_name']} (Loan: {l['principal_amount']:,.0f})": l['id'] for l in loans_res.data}
                 selected_loan = col1.selectbox("Link to Loan", list(loan_map.keys()))
                 
                 item_name = col2.text_input("Item Name (e.g., Toyota Premio Logbook)")
                 est_value = col1.number_input("Estimated Market Value (UGX)", min_value=0)
                 
-                # Photo URL (Supabase Storage in future)
                 photo_file = col2.file_uploader("Upload Photo of Collateral", type=["jpg", "jpeg", "png"])
-
                 notes = st.text_area("Condition Notes / Serial Numbers")
 
                 if st.form_submit_button("🔒 Secure Asset"):
                     if not item_name or est_value <= 0:
-                        st.warning("Please provide all required details (Item Name, Estimated Value).")
+                        st.warning("Please provide Item Name and Estimated Value.")
                     elif photo_file is None:
-                        st.warning("Please upload a photo of the collateral.")
+                        st.warning("Please upload a photo of the collateral for the audit trail.")
                     else:
                         target_loan_id = loan_map[selected_loan]
-                        
-                        # Upload image to Supabase Storage and get the public URL
                         photo_url = upload_image(photo_file)
                         
-                        # Insert collateral item into the database
-                        data = {
-                            "loan_id": target_loan_id,
-                            "item_name": item_name,
-                            "estimated_value": est_value,
-                            "condition_notes": notes,
-                            "photo_url": photo_url
-                        }
-                        supabase.table("collateral").insert(data).execute()
+                        if photo_url:
+                            data = {
+                                "loan_id": target_loan_id,
+                                "item_name": item_name,
+                                "estimated_value": est_value,
+                                "condition_notes": notes,
+                                "photo_url": photo_url
+                            }
+                            supabase.table("collateral").insert(data).execute()
 
-                        # Log the action to the audit log
-                        log_audit(
-                            action="INSERT",
-                            item_name=item_name,
-                            old_value="N/A",
-                            new_value=str(data)
-                        )
-                        
-                        st.success(f"✅ {item_name} has been secured to the loan ledger.")
-                        st.rerun()
+                            log_audit("INSERT", item_name, "N/A", data)
+                            
+                            st.success(f"✅ {item_name} has been secured to the loan ledger.")
+                            st.rerun()
 
         # --- COLLATERAL INVENTORY ---
         st.write("---")
@@ -695,7 +686,6 @@ elif page == "🛡️ Collateral":
         
         if collat_res.data:
             for c in collat_res.data:
-                # Math: Coverage Ratio (Is the asset worth more than the debt?)
                 debt = float(c['loans']['balance_remaining'])
                 value = float(c['estimated_value'])
                 coverage = (value / debt * 100) if debt > 0 else 100
@@ -703,54 +693,34 @@ elif page == "🛡️ Collateral":
                 with st.container():
                     c1, c2, c3 = st.columns([2, 1, 1])
                     
-                    # Asset Information Display
                     c1.markdown(f"**{c['item_name']}**\nOwned by: {c['loans']['clients']['full_name']}")
                     c2.write(f"Value: **{value:,.0f} UGX**")
                     
-                    # Color-coded coverage indicator with detailed explanation
                     if coverage < 100:
-                        c3.warning(f"⚠️ Coverage: {coverage:.0f}%\nAsset value is less than remaining debt.")
+                        c3.warning(f"⚠️ Coverage: {coverage:.0f}%")
                     else:
-                        c3.success(f"✅ Coverage: {coverage:.0f}%\nAsset is adequately covered.")
+                        c3.success(f"✅ Coverage: {coverage:.0f}%")
                     
                     st.caption(f"Notes: {c['condition_notes']}")
-                    if c['photo_url']:
-                        st.image(c['photo_url'], caption="Photo Reference", use_column_width=True)
                     
-                    # Update or Delete Button Logic
-                    update_btn = st.button("Update", key=c['id'])
-                    delete_btn = st.button("Delete", key=f"delete_{c['id']}")
-
-                    if update_btn:
-                        # Update logic (can be improved with a dedicated update form)
-                        new_value = st.text_input(f"New Value for {c['item_name']}", value=str(c['estimated_value']))
-                        if st.button("Save Update"):
-                            # Log the update action
-                            log_audit(
-                                action="UPDATE",
-                                item_name=c['item_name'],
-                                old_value=str(c['estimated_value']),
-                                new_value=new_value
-                            )
-                            supabase.table("collateral").update({"estimated_value": new_value}).eq("id", c['id']).execute()
-                            st.success("Collateral item updated successfully.")
-                            st.rerun()
-                        
-                    if delete_btn:
-                        # Delete logic
-                        log_audit(
-                            action="DELETE",
-                            item_name=c['item_name'],
-                            old_value=str(c['estimated_value']),
-                            new_value="N/A"
-                        )
+                    if c['photo_url']:
+                        with st.expander("👁️ View Asset Photo"):
+                            st.image(c['photo_url'], use_column_width=True)
+                    
+                    # Actions Row
+                    act1, act2, _ = st.columns([1, 1, 2])
+                    if act1.button("🗑️ Delete", key=f"del_{c['id']}"):
+                        log_audit("DELETE", c['item_name'], value, "N/A")
                         supabase.table("collateral").delete().eq("id", c['id']).execute()
-                        st.success(f"Collateral item {c['item_name']} deleted successfully.")
                         st.rerun()
-
+                        
                     st.write("---")
         else:
             st.info("No collateral items found for active loans.")
+
+
+
+
 elif page == "💰 Payments":
     st.title(f"💰 {active_company['name']} | Collections Engine")
 
@@ -765,6 +735,9 @@ elif page == "💰 Payments":
         df_loans = pd.DataFrame(loans)
 
         st.markdown("### 📥 Record Client Payment")
+
+        # CSS Fix for labels (ensures readability on white background)
+        st.markdown("<style>[data-testid='stWidgetLabel'] p { color: #31333F !important; }</style>", unsafe_allow_html=True)
 
         with st.form("pay_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
@@ -803,7 +776,6 @@ elif page == "💰 Payments":
 
             # --- SUBMIT ---
             if st.form_submit_button("✅ Post Payment", use_container_width=True):
-
                 if pay_amt <= 0:
                     st.error("Amount must be greater than zero.")
                 else:
@@ -832,6 +804,7 @@ elif page == "💰 Payments":
                         receipt = f"""
                         PAYMENT RECEIPT
                         -------------------------
+                        Company: {active_company['name']}
                         Client: {loan['clients']['full_name']}
                         Amount Paid: {final_payment:,.0f} UGX
                         Method: {method}
@@ -843,7 +816,7 @@ elif page == "💰 Payments":
                         st.download_button(
                             label="📥 Download Receipt",
                             data=receipt,
-                            file_name="payment_receipt.txt",
+                            file_name=f"Receipt_{loan['clients']['full_name']}.txt",
                             mime="text/plain",
                             use_container_width=True
                         )
@@ -880,224 +853,335 @@ elif page == "💰 Payments":
 
     else:
         st.info("🎉 All loans are settled. No active repayments needed.")
-st.title(f"🚨 {active_company['name']} | Overdue Tracker")
 
-# Fetch active, non-settled loans
-overdue = supabase.table("loans").select("*, clients(full_name)").eq("company_id", active_company['id']).neq("loan_status", "Settled").execute().data
 
-if not overdue:
-    st.info("No overdue loans at the moment.")
-else:
-    total_overdue = sum(float(l['balance_remaining']) for l in overdue)
-    st.metric("Total Overdue Portfolio", f"{total_overdue:,.0f} UGX")
 
-    for l in overdue:
-        c1, c2, c3 = st.columns([3,1,1])
-        c1.write(f"**{l['clients']['full_name']}** - Remaining: {float(l['balance_remaining']):,.0f} UGX")
+elif page == "🚨 Overdue":
+    st.title(f"🚨 {active_company['name']} | Overdue Tracker")
+
+    # Fetch active, non-settled loans linked to this company
+    overdue = supabase.table("loans").select("*, clients(full_name)").eq("company_id", active_company['id']).neq("loan_status", "Settled").execute().data
+
+    if not overdue:
+        st.success("🎉 Excellent! No overdue loans at the moment.")
+    else:
+        total_overdue = sum(float(l['balance_remaining']) for l in overdue)
+        st.metric("Total Outstanding Portfolio", f"{total_overdue:,.0f} UGX", delta="Risk Exposure", delta_color="inverse")
+
+        st.write("---")
         
-        # Apply penalty button
-        if c2.button("Apply 10% Penalty", key=f"penalty_{l['id']}"):
-            penalty = float(l['monthly_installment']) * 0.1
-            new_balance = float(l['balance_remaining']) + penalty
-            supabase.table("loans").update({
-                "balance_remaining": new_balance,
-                "loan_status": "Overdue"
-            }).eq("id", l['id']).execute()
-            st.warning(f"Penalty of {penalty:,.0f} UGX applied!")
-            st.rerun()
+        # Header for the list
+        h1, h2, h3 = st.columns([3,1,1])
+        h1.subheader("Client & Balance")
+        h2.subheader("Penalty")
+        h3.subheader("Rollover")
+
+        for l in overdue:
+            with st.container():
+                c1, c2, c3 = st.columns([3,1,1])
+                
+                # --- CLIENT INFO ---
+                balance = float(l['balance_remaining'])
+                status = l['loan_status']
+                status_color = "red" if status == "Overdue" else "orange"
+                
+                c1.markdown(f"**{l['clients']['full_name']}**")
+                c1.markdown(f"Remaining: `{balance:,.0f} UGX` | Status: :{status_color}[{status}]")
+                
+                # --- APPLY PENALTY BUTTON ---
+                # Calculation: 10% of the monthly installment as a late fee
+                if c2.button("➕ 10% Penalty", key=f"penalty_{l['id']}", use_container_width=True):
+                    penalty = float(l['monthly_installment']) * 0.1
+                    new_balance = balance + penalty
+                    
+                    supabase.table("loans").update({
+                        "balance_remaining": new_balance,
+                        "loan_status": "Overdue"
+                    }).eq("id", l['id']).execute()
+                    
+                    st.warning(f"Penalty of {penalty:,.0f} UGX applied to {l['clients']['full_name']}!")
+                    st.rerun()
+                
+                # --- ROLLOVER LOAN BUTTON ---
+                # Calculation: Capitalize the remaining balance into a NEW loan structure
+                if c3.button("🔄 Rollover", key=f"rollover_{l['id']}", use_container_width=True):
+                    new_principal = balance
+                    new_duration = int(l['duration_months'])  
+                    
+                    # Reuse your math helper
+                    new_total, new_monthly = calculate_loan(new_principal, float(l['interest_rate']), new_duration)
+                    
+                    supabase.table("loans").update({
+                        "principal_amount": new_principal,
+                        "total_repayable": new_total,
+                        "monthly_installment": new_monthly,
+                        "balance_remaining": new_total,
+                        "loan_status": "Active" # Reset to active because it's a "new" agreement
+                    }).eq("id", l['id']).execute()
+                    
+                    st.success(f"Loan rolled over! New Monthly: {new_monthly:,.0f} UGX")
+                    st.rerun()
+                
+                st.write("---")
+
+
+elif page == "📄 Payroll":
+    st.title(f"📄 {active_company['name']} | Payroll Engine")
+
+    # Fetch staff (assumes staff are registered in the clients table with is_employee=True)
+    staff = get_data("clients", active_company['id'])
+    
+    if not staff:
+        st.warning("No staff registered yet. Please add staff members in the Client/Staff Registry to process payroll.")
+        st.stop()
+
+    # --- PAYROLL PROCESSING FORM ---
+    with st.form("payroll_form"):
+        target_staff = st.selectbox("Select Staff Member", [s['full_name'] for s in staff])
+        st.subheader("Salary Details 💼")
         
-        # Rollover logic button
-        if c3.button("Rollover Loan", key=f"rollover_{l['id']}"):
-            new_principal = float(l['balance_remaining'])
-            new_duration = int(l['duration_months'])  # optional: keep same or allow input
-            new_total, new_monthly = calculate_loan(new_principal, float(l['interest_rate']), new_duration)
-            supabase.table("loans").update({
-                "principal_amount": new_principal,
-                "total_repayable": new_total,
-                "monthly_installment": new_monthly,
-                "balance_remaining": new_total,
-                "loan_status": "Active"
-            }).eq("id", l['id']).execute()
-            st.success(f"Loan rolled over! New total: {new_total:,.0f} UGX, Monthly: {new_monthly:,.0f} UGX")
-            st.rerun()
-import io
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+        basic = st.number_input("Basic Salary (UGX)", min_value=100_000, step=10_000, format="%d")
 
-st.title(f"📄 {active_company['name']} | Payroll Engine")
+        # Payroll calculations using your Uganda tax helper
+        nssf, paye, net = calculate_uganda_payroll(basic)
 
-# Fetch staff
-staff = get_data("clients", active_company['id'])
-if not staff:
-    st.warning("No staff registered yet. Please add staff to process payroll.")
-    st.stop()
+        # Live Calculation Preview
+        col1, col2, col3 = st.columns(3)
+        col1.metric("NSSF (5%)", f"{nssf:,.0f} UGX")
+        col2.metric("PAYE Tax", f"{paye:,.0f} UGX")
+        col3.metric("Net Take-Home", f"{net:,.0f} UGX", delta_color="normal")
+        
+        st.markdown("---")
 
-# Form to process payroll
-with st.form("payroll_form"):
-    target_staff = st.selectbox("Select Staff Member", [s['full_name'] for s in staff])
-    st.subheader("Salary Details 💼")
-    basic = st.number_input("Basic Salary (UGX)", min_value=100_000, step=10_000, format="%d")
+        submit_payroll = st.form_submit_button("🚀 Process & Post Salary")
 
-    # Payroll calculations
-    nssf, paye, net = calculate_uganda_payroll(basic)
+        if submit_payroll:
+            # 1. Post to expenses table so it reflects in P&L
+            supabase.table("expenses").insert({
+                "company_id": active_company['id'],
+                "category": "Salaries",
+                "description": f"Salary for {target_staff} ({datetime.now().strftime('%B %Y')})",
+                "amount": basic
+            }).execute()
 
-    # Display metrics
-    col1, col2, col3 = st.columns(3)
-    col1.metric("NSSF Contribution", f"{nssf:,.0f} UGX")
-    col2.metric("PAYE Deduction", f"{paye:,.0f} UGX")
-    col3.metric("Net Pay", f"{net:,.0f} UGX")
+            st.success(f"✅ Payroll posted for {target_staff}! Net Pay: {net:,.0f} UGX")
+            st.balloons()
+
+            # 2. Generate payroll PDF in-memory
+            import io
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+
+            buffer = io.BytesIO()
+            c = canvas.Canvas(buffer, pagesize=A4)
+            
+            # PDF Styling
+            c.setFont("Helvetica-Bold", 16)
+            c.drawString(50, 800, f"{active_company['name']} - Official Pay Slip")
+            c.setFont("Helvetica", 12)
+            c.line(50, 790, 550, 790)
+            
+            c.drawString(50, 770, f"Employee Name: {target_staff}")
+            c.drawString(50, 750, f"Pay Period: {datetime.now().strftime('%B %Y')}")
+            st.write("---")
+            c.drawString(50, 720, f"Basic Salary: {basic:,.0f} UGX")
+            c.drawString(50, 700, f"NSSF Contribution (5%): ({nssf:,.0f}) UGX")
+            c.drawString(50, 680, f"PAYE Tax Deduction: ({paye:,.0f}) UGX")
+            c.line(50, 670, 200, 670)
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, 650, f"NET PAYABLE: {net:,.0f} UGX")
+            
+            c.setFont("Helvetica-Oblique", 10)
+            c.drawString(50, 600, "This is a computer generated pay slip. No signature required.")
+            c.showPage()
+            c.save()
+            
+            buffer.seek(0)
+            
+            # 3. Provide download link
+            st.download_button(
+                label="📥 Download Pay Slip (PDF)",
+                data=buffer,
+                file_name=f"PaySlip_{target_staff}_{datetime.now().strftime('%b_%Y')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+    # --- MONTHLY PAYROLL LEDGER (Outside the form) ---
+    st.write("---")
+    st.subheader("📊 Payroll History Ledger")
+    
+    # Fetch all salary expenses for this company
+    ledger = supabase.table("expenses")\
+        .select("*")\
+        .eq("company_id", active_company['id'])\
+        .eq("category", "Salaries")\
+        .order("created_at", desc=True)\
+        .execute().data
+
+    if ledger:
+        df_ledger = pd.DataFrame(ledger)
+        # Displaying with nice formatting
+        df_ledger['Formatted Amount'] = df_ledger['amount'].apply(lambda x: f"{float(x):,.0f} UGX")
+        st.dataframe(
+            df_ledger[['expense_date', 'description', 'Formatted Amount']], 
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No payroll entries found in the ledger for this company.")
+
+
+
+
+
+
+elif page == "📂 Expenses":
+    st.title(f"📂 {active_company['name']} | Expense Tracker")
+
+    # --- CSS FIX: Ensure form visibility ---
+    st.markdown("<style>[data-testid='stWidgetLabel'] p { color: #31333F !important; }</style>", unsafe_allow_html=True)
+
+    # --- EXPENSE INPUT FORM ---
+    with st.form("exp_form"):
+        st.subheader("Log New Expense 💸")
+        col1, col2 = st.columns([2, 3])
+        
+        with col1:
+            cat = st.selectbox("Category", [
+                "Rent", "Taxes", "Marketing", 
+                "Petty Cash", "Utilities", 
+                "Salaries", "Miscellaneous"
+            ])
+        
+        with col2:
+            desc = st.text_input("Description / Notes (e.g., Office Internet)")
+        
+        amt = st.number_input("Amount (UGX)", min_value=1000, step=1000, format="%d")
+
+        if st.form_submit_button("🚀 Record Outflow", use_container_width=True):
+            if not desc:
+                st.warning("Please provide a brief description.")
+            else:
+                supabase.table("expenses").insert({
+                    "company_id": active_company['id'],
+                    "category": cat,
+                    "description": desc,
+                    "amount": amt
+                }).execute()
+                
+                st.success(f"✅ Expense of {amt:,.0f} UGX recorded under {cat}")
+                st.rerun()
+
     st.markdown("---")
 
-    if st.form_submit_button("Process Salary"):
-        # Post to expenses
-        supabase.table("expenses").insert({
-            "company_id": active_company['id'],
-            "category": "Salaries",
-            "description": f"Salary for {target_staff}",
-            "amount": basic
-        }).execute()
-
-        st.success(f"✅ Payroll posted for {target_staff}! Net Pay: {net:,.0f} UGX")
-        st.balloons()
-
-        # Generate payroll PDF
-        buffer = io.BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, 800, f"{active_company['name']} - Payroll Slip")
-        c.setFont("Helvetica", 12)
-        c.drawString(50, 770, f"Staff: {target_staff}")
-        c.drawString(50, 750, f"Basic Salary: {basic:,.0f} UGX")
-        c.drawString(50, 730, f"NSSF Contribution: {nssf:,.0f} UGX")
-        c.drawString(50, 710, f"PAYE Deduction: {paye:,.0f} UGX")
-        c.drawString(50, 690, f"Net Pay: {net:,.0f} UGX")
-        c.drawString(50, 660, "Thank you for your service!")
-        c.showPage()
-        c.save()
-        buffer.seek(0)
-        st.download_button(
-            label="📄 Download Payroll Slip (PDF)",
-            data=buffer,
-            file_name=f"{target_staff}_payroll.pdf",
-            mime="application/pdf"
+    # --- FETCH AND DISPLAY EXPENSES ---
+    expenses_data = get_data("expenses", active_company['id'])
+    
+    if expenses_data:
+        df_exp = pd.DataFrame(expenses_data)
+        
+        # Ensure 'amount' is treated as a float for math/charts
+        df_exp['amount'] = pd.to_numeric(df_exp['amount'], errors='coerce').fillna(0)
+        
+        # Display Ledger
+        st.subheader("📊 Expense Ledger")
+        df_display = df_exp.copy()
+        df_display['Amount (UGX)'] = df_display['amount'].apply(lambda x: f"{x:,.0f}")
+        
+        st.dataframe(
+            df_display[['category', 'description', 'Amount (UGX)']], 
+            use_container_width=True,
+            hide_index=True
         )
 
-        st.rerun()
-
-# Monthly payroll ledger
-st.subheader("📊 Monthly Payroll Ledger")
-ledger = supabase.table("expenses").select("*").eq("company_id", active_company['id']).eq("category", "Salaries").execute().data
-if ledger:
-    df_ledger = pd.DataFrame(ledger)
-    df_ledger['Amount (UGX)'] = df_ledger['amount'].apply(lambda x: f"{x:,.0f}")
-    st.dataframe(df_ledger[['description', 'Amount (UGX)']], use_container_width=True)
-else:
-    st.info("No payroll entries found for this month.")
-
-st.title(f"📂 {active_company['name']} | Expense Tracker")
-
-# Expense Input Form
-with st.form("exp_form"):
-    st.subheader("Log New Expense 💸")
-    col1, col2 = st.columns([2,3])
-    with col1:
-        cat = st.selectbox("Category", ["Rent", "Taxes", "Marketing", "Petty Cash", "Utilities", "Salaries", "Miscellaneous"])
-    with col2:
-        desc = st.text_input("Description / Notes")
-    amt = st.number_input("Amount (UGX)", min_value=1000, step=1000, format="%d")
-
-    if st.form_submit_button("Record Outflow"):
-        supabase.table("expenses").insert({
-            "company_id": active_company['id'],
-            "category": cat,
-            "description": desc,
-            "amount": amt
-        }).execute()
-        st.success(f"✅ Expense of {amt:,.0f} UGX recorded under {cat}")
-        st.rerun()
-
-st.markdown("---")
-
-# Fetch and display expenses
-expenses = get_data("expenses", active_company['id'])
-if expenses:
-    df_exp = pd.DataFrame(expenses)
-    df_exp['Amount (UGX)'] = df_exp['amount'].apply(lambda x: f"{x:,.0f}")
-    st.subheader("📊 Expense Ledger")
-    st.dataframe(df_exp[['category', 'description', 'Amount (UGX)']], use_container_width=True)
-
-    # Analytics: Category-wise spend
-    st.subheader("📈 Category-wise Spend")
-    import plotly.express as px
-    cat_df = df_exp.groupby('category')['amount'].sum().reset_index()
-    fig = px.bar(cat_df, x='category', y='amount', text='amount', color='category',
-                 color_discrete_sequence=px.colors.qualitative.Pastel, title="Total Spend by Category")
-    fig.update_layout(yaxis_title="Amount (UGX)", xaxis_title="Category", showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("No expenses logged yet. Start by recording an outflow above.")
+        # --- ANALYTICS: CATEGORY-WISE SPEND ---
+        st.write("---")
+        st.subheader("📈 Spending Intelligence")
+        
+        # Group by category
+        cat_df = df_exp.groupby('category')['amount'].sum().reset_index()
+        
+        # Build the chart
+        fig = px.bar(
+            cat_df, 
+            x='category', 
+            y='amount', 
+            text_auto=',.0f', # Shows formatted numbers on the bars
+            color='category',
+            color_discrete_sequence=px.colors.qualitative.Prism, # Bold, modern colors
+            title="Total Spend by Category"
+        )
+        
+        fig.update_layout(
+            yaxis_title="Amount (UGX)", 
+            xaxis_title="Category", 
+            showlegend=False,
+            font=dict(size=12)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+    else:
+        st.info("No expenses logged yet. Start by recording an outflow above.")
 
 
 
-import streamlit as st
-import pandas as pd
-import plotly.express as px
+# --- HELPER: PDF GENERATOR (Place at the top of your app.py) ---
 from fpdf import FPDF
 from io import BytesIO
-import datetime
 
-# Helper function to generate PDF
-def generate_pdf(client_name, total_borrowed, total_paid, current_balance, history_df, company_name="Your Company"):
+def generate_pdf(client_name, total_borrowed, total_paid, current_balance, history_df, company_name="Peak-Lenders Africa"):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    # Title
+    # Header
     pdf.set_font('Arial', 'B', 16)
-    pdf.cell(200, 10, f"{company_name} - Client Statement", ln=True, align='C')
+    pdf.cell(200, 10, f"{company_name}", ln=True, align='C')
+    pdf.set_font('Arial', '', 12)
+    pdf.cell(200, 10, "Official Client Statement of Account", ln=True, align='C')
     pdf.ln(10)
     
     # Client Info
-    pdf.set_font('Arial', '', 12)
-    pdf.cell(200, 10, f"Client: {client_name}", ln=True)
-    pdf.cell(200, 10, f"Date: {datetime.datetime.now().strftime('%B %d, %Y')}", ln=True)
-    pdf.ln(10)
+    pdf.set_font('Arial', '', 11)
+    pdf.cell(100, 7, f"Client: {client_name}", ln=False)
+    pdf.cell(100, 7, f"Date: {datetime.datetime.now().strftime('%d %b %Y')}", ln=True, align='R')
+    pdf.ln(5)
     
-    # Financial Summary
+    # Financial Summary Box
+    pdf.set_fill_color(240, 240, 240)
     pdf.set_font('Arial', 'B', 12)
-    pdf.cell(200, 10, "📊 Financial Summary", ln=True)
-    pdf.set_font('Arial', '', 12)
-    pdf.cell(200, 10, f"Total Borrowed: {total_borrowed:,.0f} UGX", ln=True)
-    pdf.cell(200, 10, f"Total Repaid: {total_paid:,.0f} UGX", ln=True)
-    pdf.cell(200, 10, f"Outstanding Debt: {current_balance:,.0f} UGX", ln=True)
+    pdf.cell(0, 10, " FINANCIAL SUMMARY", ln=True, fill=True)
+    pdf.set_font('Arial', '', 11)
+    pdf.cell(0, 8, f" Total Borrowed: {total_borrowed:,.0f} UGX", ln=True)
+    pdf.cell(0, 8, f" Total Repaid: {total_paid:,.0f} UGX", ln=True)
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(0, 8, f" OUTSTANDING BALANCE: {current_balance:,.0f} UGX", ln=True)
     pdf.ln(10)
     
-    # Transaction History Table
+    # Transaction Table Header
     pdf.set_font('Arial', 'B', 10)
-    pdf.cell(40, 10, "Date", border=1)
-    pdf.cell(50, 10, "Transaction Type", border=1)
-    pdf.cell(40, 10, "Debit (UGX)", border=1)
-    pdf.cell(40, 10, "Credit (UGX)", border=1)
-    pdf.cell(30, 10, "Reference", border=1)
-    pdf.ln()
+    pdf.cell(35, 10, "Date", 1, 0, 'C')
+    pdf.cell(65, 10, "Transaction Type", 1, 0, 'C')
+    pdf.cell(45, 10, "Debit (UGX)", 1, 0, 'C')
+    pdf.cell(45, 10, "Credit (UGX)", 1, 1, 'C')
     
-    pdf.set_font('Arial', '', 10)
+    # Table Rows
+    pdf.set_font('Arial', '', 9)
     for _, row in history_df.iterrows():
-        pdf.cell(40, 10, str(row['Date']), border=1)
-        pdf.cell(50, 10, row['Type'], border=1)
-        pdf.cell(40, 10, f"{row['Debit']:.0f}", border=1)
-        pdf.cell(40, 10, f"{row['Credit']:.0f}", border=1)
-        pdf.cell(30, 10, row['Ref'], border=1)
-        pdf.ln()
+        pdf.cell(35, 8, str(row['Date']), 1)
+        pdf.cell(65, 8, str(row['Type']), 1)
+        pdf.cell(45, 8, f"{row['Debit']:,.0f}", 1, 0, 'R')
+        pdf.cell(45, 8, f"{row['Credit']:,.0f}", 1, 1, 'R')
     
-    # Save to BytesIO
     pdf_output = BytesIO()
     pdf.output(pdf_output)
     pdf_output.seek(0)
-    
     return pdf_output
 
-# Streamlit page logic
+# --- PAGE LOGIC (Inside your Switchboard) ---
+
 if page == "📄 Ledger":
     st.title(f"📄 {active_company['name']} | Client Statements")
     
@@ -1112,130 +1196,188 @@ if page == "📄 Ledger":
         target_id = client_map[target_name]
 
         # 2. Fetch History
-        loans, payments = get_client_statement(target_id)
+        loans_data = supabase.table("loans").select("*").eq("client_id", target_id).execute().data
+        payments_data = supabase.table("transactions").select("*, loans(id)").eq("loans.client_id", target_id).execute().data
 
-        if not loans:
-            st.warning("This client has no loan history.")
+        if not loans_data:
+            st.warning(f"⚠️ {target_name} has no loan history.")
         else:
             st.write(f"### 📊 Financial Summary: {target_name}")
             
             # --- OVERVIEW METRICS ---
-            total_borrowed = sum(float(l['principal_amount']) for l in loans)
-            current_balance = sum(float(l['balance_remaining']) for l in loans)
-            total_paid = sum(float(p['amount_paid']) for p in payments)
+            total_borrowed = sum(float(l['total_repayable']) for l in loans_data)
+            current_balance = sum(float(l['balance_remaining']) for l in loans_data)
+            total_paid = sum(float(p['amount_paid']) for p in payments_data) if payments_data else 0
 
             c1, c2, c3 = st.columns(3)
-            c1.metric("Total Principal Taken", f"{total_borrowed:,.0f} UGX")
-            c2.metric("Total Repaid to Date", f"{total_paid:,.0f} UGX", delta=f"{total_paid/total_borrowed*100:.1f}% Recovery")
+            c1.metric("Total Billable", f"{total_borrowed:,.0f} UGX")
+            c2.metric("Total Repaid", f"{total_paid:,.0f} UGX", delta=f"{(total_paid/total_borrowed*100 if total_borrowed > 0 else 0):.1f}% Recovery")
             c3.metric("Outstanding Debt", f"{current_balance:,.0f} UGX", delta_color="inverse")
 
             # --- THE TRANSACTION TIMELINE ---
             st.write("---")
             st.subheader("📑 Chronological Statement of Account")
             
-            # Combine Loans and Payments into one list for the "Trend"
             history = []
-            for l in loans:
-                history.append({"Date": l['disbursement_date'], "Type": "LOAN DISBURSED", "Debit": l['total_repayable'], "Credit": 0, "Ref": "System Gen"})
-            for p in payments:
-                history.append({"Date": p['payment_date'][:10], "Type": "PAYMENT RECEIVED", "Debit": 0, "Credit": p['amount_paid'], "Ref": p['transaction_ref']})
+            for l in loans_data:
+                history.append({
+                    "Date": l['disbursement_date'], 
+                    "Type": "LOAN DISBURSED", 
+                    "Debit": float(l['total_repayable']), 
+                    "Credit": 0, 
+                    "Ref": "System Gen"
+                })
+            for p in payments_data:
+                history.append({
+                    "Date": p['payment_date'][:10], 
+                    "Type": "PAYMENT RECEIVED", 
+                    "Debit": 0, 
+                    "Credit": float(p['amount_paid']), 
+                    "Ref": p.get('transaction_ref', 'N/A')
+                })
             
             df_history = pd.DataFrame(history).sort_values(by="Date")
             
-            # Format the table for the "Luxe" feel
-            st.dataframe(df_history.style.format({
-                "Debit": "{:,.0f}", "Credit": "{:,.0f}"
-            }).set_properties(**{'background-color': '#ffffff', 'color': '#000000'}), use_container_width=True, hide_index=True)
+            # Luxe Table View
+            st.dataframe(
+                df_history.style.format({"Debit": "{:,.0f}", "Credit": "{:,.0f}"}),
+                use_container_width=True, 
+                hide_index=True
+            )
 
-            # --- DOWNLOADABLE PDF/CSV LOGIC ---
+            # --- EXPORT SECTION ---
+            st.write("---")
+            col_ex1, col_ex2 = st.columns(2)
+            
+            # CSV Export
             csv = df_history.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label=f"📥 Download {target_name}'s Statement (CSV)",
+            col_ex1.download_button(
+                label=f"📥 Download CSV Statement",
                 data=csv,
-                file_name=f"{target_name}_Statement.csv",
+                file_name=f"Statement_{target_name}.csv",
                 mime='text/csv',
                 use_container_width=True
             )
             
-            # Button to generate and download PDF statement
-            if st.button(f"📥 Download {target_name}'s Statement (PDF)"):
-                pdf_output = generate_pdf(target_name, total_borrowed, total_paid, current_balance, df_history)
-                st.download_button(
-                    label=f"Download PDF Statement for {target_name}",
-                    data=pdf_output,
-                    file_name=f"{target_name}_Statement.pdf",
-                    mime="application/pdf"
-                )
+            # PDF Export (Logic fixed: generates only when clicked)
+            pdf_statement = generate_pdf(target_name, total_borrowed, total_paid, current_balance, df_history, active_company['name'])
+            col_ex2.download_button(
+                label=f"📥 Download PDF Statement",
+                data=pdf_statement,
+                file_name=f"Statement_{target_name}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 
-            # --- CHARTS ---
+            # --- ANALYTICS ---
             st.write("---")
-            st.subheader("📊 Loan and Payment Trends")
+            col_ch1, col_ch2 = st.columns(2)
             
-            # Pie chart of loan statuses
-            loan_statuses = pd.DataFrame(loans)
-            loan_status_pie = px.pie(loan_statuses, names='loan_status', values='balance_remaining', hole=0.3, title="Loan Status Distribution")
-            st.plotly_chart(loan_status_pie, use_container_width=True)
+            with col_ch1:
+                st.write("#### 💸 Payment Velocity")
+                if not df_history.empty:
+                    fig_line = px.line(df_history[df_history['Credit'] > 0], x='Date', y='Credit', markers=True, 
+                                       color_discrete_sequence=[active_company['brand_color']])
+                    st.plotly_chart(fig_line, use_container_width=True)
             
-            # Bar chart of payments over time
-            payments_df = pd.DataFrame(payments)
-            payments_df['payment_date'] = pd.to_datetime(payments_df['payment_date'])
-            payments_bar = px.bar(payments_df, x='payment_date', y='amount_paid', title="Payments Over Time")
-            st.plotly_chart(payments_bar, use_container_width=True)
-
+            with col_ch2:
+                st.write("#### ⚖️ Balance Distribution")
+                df_loans = pd.DataFrame(loans_data)
+                fig_pie = px.pie(df_loans, names='loan_status', values='balance_remaining', 
+                                 color_discrete_map={'Active': active_company['brand_color'], 'Overdue': '#E53935'})
+                st.plotly_chart(fig_pie, use_container_width=True)
 
 elif page == "🧾 Reports":
-    st.title("🧾 P&L and Balance Sheet")
+    st.title(f"🧾 {active_company['name']} | Financial Reporting")
     
-    # Fetching metrics
+    # --- FETCHING METRICS ---
     loans, payments, expenses = get_dashboard_metrics(active_company['id'])
     
-    # Revenue: Total Interest Revenue
+    # Revenue: This is the INTEREST earned (Total Repayable - Principal)
+    # Note: Professional lenders only count interest as revenue, not the principal returned!
     rev = sum((float(l['total_repayable']) - float(l['principal_amount'])) for l in loans)
     
-    # Operating Expenses
+    # Operating Expenses (Rent, Salaries, Marketing, etc.)
     opex = sum(float(e['amount']) for e in expenses)
     
     # Net Profit Calculation
     net_profit = rev - opex
     
-    # --- Enhanced Layout with Cards for Key Metrics ---
+    # --- EXECUTIVE METRIC STRIP ---
+    st.markdown("### 🏦 Key Performance Indicators")
     c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("Total Interest Revenue", f"{rev:,.0f} UGX")
-    with c2:
-        st.metric("Total Operating Expenses", f"{opex:,.0f} UGX")
-    with c3:
-        st.metric("Net Profit", f"{net_profit:,.0f} UGX", delta=f"{'+' if net_profit >= 0 else ''}{net_profit:,.0f} UGX")
+    
+    # Revenue Metric
+    c1.metric("Projected Interest Revenue", f"{rev:,.0f} UGX", help="Total interest expected from all disbursed loans.")
+    
+    # Expense Metric
+    c2.metric("Total Operating Expenses", f"{opex:,.0f} UGX", delta=f"-{opex:,.0f}", delta_color="inverse")
+    
+    # Profit Metric
+    profit_label = "Net Profit" if net_profit >= 0 else "Net Loss"
+    c3.metric(profit_label, f"{net_profit:,.0f} UGX", 
+              delta=f"{(net_profit/rev*100 if rev > 0 else 0):.1f}% Margin")
 
-    # --- Profit and Loss Statement ---
-    st.subheader("📊 Profit & Loss Statement")
+    st.write("---")
+
+    # --- THE P&L STATEMENT ---
+    st.subheader("📊 Profit & Loss Statement (Simplified)")
     
-    st.write(f"**Total Interest Revenue**: {rev:,.0f} UGX")
-    st.write(f"**Total Operating Expenses**: {opex:,.0f} UGX")
+    # Using a clean table for the statement
+    pnl_data = [
+        {"Account": "Total Interest Income", "Amount (UGX)": f"{rev:,.0f}"},
+        {"Account": "Less: Total Operating Expenses", "Amount (UGX)": f"({opex:,.0f})"},
+        {"Account": "NET OPERATING INCOME", "Amount (UGX)": f"{net_profit:,.0f}"}
+    ]
+    st.table(pd.DataFrame(pnl_data))
     
-    # --- Net Profit Visualization ---
-    st.write(f"---")
+    # Highlight the final result
     if net_profit >= 0:
-        st.success(f"**Net Profit**: {net_profit:,.0f} UGX")
+        st.success(f"💰 The business is currently PROFITABLE with a margin of {(net_profit/rev*100 if rev > 0 else 0):.1f}%")
     else:
-        st.error(f"**Net Loss**: {abs(net_profit):,.0f} UGX")
+        st.error(f"⚠️ The business is currently operating at a LOSS of {abs(net_profit):,.0f} UGX")
     
-    # --- Additional Visualization for Better Insight ---
-    # Bar chart to visualize income vs expenses
-    df_report = pd.DataFrame({
-        'Category': ['Interest Revenue', 'Operating Expenses', 'Net Profit'],
-        'Amount': [rev, opex, net_profit]
-    })
+    # --- VISUAL INTELLIGENCE ---
+    st.write("---")
+    col_chart1, col_chart2 = st.columns(2)
     
-    st.bar_chart(df_report.set_index('Category')['Amount'])
+    with col_chart1:
+        st.write("#### 📈 Revenue vs. Expenses")
+        df_report = pd.DataFrame({
+            'Category': ['Interest Revenue', 'Operating Expenses'],
+            'Amount': [rev, opex]
+        })
+        # Using Plotly for a better look than basic bar_chart
+        fig_pnl = px.bar(df_report, x='Category', y='Amount', color='Category',
+                         color_discrete_map={'Interest Revenue': active_company['brand_color'], 'Operating Expenses': '#FF4B4B'})
+        st.plotly_chart(fig_pnl, use_container_width=True)
+        
+    with col_chart2:
+        st.write("#### 🍰 Expense Breakdown")
+        if expenses:
+            df_exp_pie = pd.DataFrame(expenses)
+            fig_pie = px.pie(df_exp_pie, names='category', values='amount', hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+    # --- DOWNLOADABLE REPORT ---
+    st.write("---")
+    report_text = f"""
+    FINANCIAL REPORT: {active_company['name']}
+    Date Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+    --------------------------------------------------
+    TOTAL INTEREST REVENUE: {rev:,.0f} UGX
+    TOTAL OPERATING EXPENSES: {opex:,.0f} UGX
+    --------------------------------------------------
+    NET PROFIT/LOSS: {net_profit:,.0f} UGX
+    PROFIT MARGIN: {(net_profit/rev*100 if rev > 0 else 0):.1f}%
+    --------------------------------------------------
+    Generated by Peak-Lenders Africa AI Engine.
+    """
     
-    # --- Option for Downloading Report ---
-    report_data = f"Interest Revenue: {rev:,.0f} UGX\nOperating Expenses: {opex:,.0f} UGX\nNet Profit: {net_profit:,.0f} UGX"
     st.download_button(
-        label="📥 Download P&L Report",
-        data=report_data,
-        file_name=f"{active_company['name']}_PnL_Report.txt",
+        label="📥 Download Official P&L Report (.txt)",
+        data=report_text,
+        file_name=f"{active_company['name']}_Financial_Report.txt",
         mime="text/plain",
         use_container_width=True
     )
-
