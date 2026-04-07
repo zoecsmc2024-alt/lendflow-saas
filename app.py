@@ -591,41 +591,46 @@ with tab1:
 
 if page == "💵 Loans":
     st.title(f"💵 {active_company['name']} | Credit Engine")
-    # ... rest of your loan code ...
+
+    # --- 1. INITIALIZE TABS FIRST (Fixes NameError) ---
+    tab1, tab2 = st.tabs(["🚀 Issue New Loan", "📂 Loan Book"])
+
+    # --- 2. DATA FETCHING ---
     clients = get_data("clients", active_company['id'])
     loans = get_data("loans", active_company['id'])
 
+    # Stop execution if no clients exist yet
     if not clients:
-        st.warning("⚠️ Register a client first.")
+        st.warning("⚠️ Register a client in the CRM first before issuing loans.")
         st.stop()
 
+    # Convert loans to DataFrame for easier analysis
     df_loans = pd.DataFrame(loans) if loans else pd.DataFrame()
 
-    # --- LOAN FORM ---
-    st.markdown("### 🚀 Issue New Loan")
+    # --- 3. TAB 1: ISSUE NEW LOAN ---
+    with tab1:
+        st.markdown("### 🚀 Issue New Loan")
 
-    with st.form("loan_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
+        with st.form("loan_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
 
-        # Client mapping
-        c_map = {c['full_name']: c['id'] for c in clients}
-        target = col1.selectbox("👤 Select Borrower", list(c_map.keys()))
+            # Client mapping for selectbox
+            c_map = {c['full_name']: c['id'] for c in clients}
+            target = col1.selectbox("👤 Select Borrower", list(c_map.keys()))
 
-        amt = col2.number_input("💰 Principal (UGX)", min_value=10000, step=50000)
+            amt = col2.number_input("💰 Principal (UGX)", min_value=10000, step=50000)
+            rate = col1.number_input("📈 Annual Interest %", min_value=1.0, value=15.0)
+            dur = col2.number_input("⏳ Duration (Months)", min_value=1, value=6)
 
-        rate = col1.number_input("📈 Annual Interest %", min_value=1.0, value=15.0)
-        dur = col2.number_input("⏳ Duration (Months)", min_value=1, value=6)
+            # --- LIVE LOAN PREVIEW ---
+            # Assuming calculate_loan returns (total_repayable, monthly_installment)
+            total, monthly = calculate_loan(amt, rate, dur)
 
-        # --- LIVE LOAN PREVIEW ---
-        total, monthly = calculate_loan(amt, rate, dur)
-
-        st.info(f"""
-        💡 **Loan Summary**
-        - Total Repayable: {total:,.0f} UGX  
-        - Monthly Installment: {monthly:,.0f} UGX  
-        """)
-
-        # --- CLIENT EXPOSURE ---
+            st.info(f"""
+            💡 **Loan Summary**
+            - Total Repayable: **{total:,.0f} UGX**
+            - Monthly Installment: **{monthly:,.0f} UGX**
+            """)
         client_id = c_map[target]
         client_loans = df_loans[df_loans['client_id'] == client_id] if not df_loans.empty else pd.DataFrame()
 
