@@ -160,7 +160,7 @@ with st.sidebar:
 
     # Display company logo (Safe from NameError!)
     if active_company.get('logo_url'):
-        st.image(active_company['logo_url'], use_container_width=True)
+        st.image(active_company['logo_url'], use_container_width=50)
     
     st.info(f"📍 Mode: {active_company['name']}")
     st.write("---")
