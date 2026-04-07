@@ -289,6 +289,20 @@ if page == "📈 Overview":
 elif page == "👥 Clients":
     st.title(f"👥 {active_company['name']} | Client CRM System")
 
+    # --- CSS FIX: FORCE MAIN PAGE LABELS TO BE VISIBLE ---
+    st.markdown("""
+        <style>
+        /* This ensures labels on the main white background stay dark */
+        [data-testid="stWidgetLabel"] p {
+            color: #31333F !important;
+        }
+        /* This keeps sidebar labels white (overriding the above for sidebar only) */
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {
+            color: white !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     tab1, tab2 = st.tabs(["➕ Register", "📋 CRM Database"])
 
     # --- TAB 1: REGISTER ---
@@ -347,7 +361,12 @@ elif page == "👥 Clients":
                 client_id = c['id']
 
                 client_loans = df_loans[df_loans['client_id'] == client_id] if not df_loans.empty else pd.DataFrame()
-                client_payments = df_payments[df_payments['loan_id'].isin(client_loans['id'])] if not client_loans.empty else pd.DataFrame()
+                
+                # Payment tracking logic
+                if not client_loans.empty and not df_payments.empty:
+                    client_payments = df_payments[df_payments['loan_id'].isin(client_loans['id'])]
+                else:
+                    client_payments = pd.DataFrame()
 
                 total_loans = client_loans['principal_amount'].sum() if not client_loans.empty else 0
                 balance = client_loans['balance_remaining'].sum() if not client_loans.empty else 0
@@ -401,47 +420,51 @@ elif page == "👥 Clients":
             st.markdown("### 🔍 Client Deep Dive")
 
             client_names = {row["Name"]: row["id"] for _, row in df_crm.iterrows()}
-            selected_client = st.selectbox("Select Client", list(client_names.keys()))
+            selected_client = st.selectbox("Select Client for Deep Dive", list(client_names.keys()))
 
-            selected_id = client_names[selected_client]
+            if selected_client:
+                selected_id = client_names[selected_client]
 
-            # Pull detailed history
-            client_loans = df_loans[df_loans['client_id'] == selected_id]
-            client_payments = df_payments[df_payments['loan_id'].isin(client_loans['id'])] if not client_loans.empty else pd.DataFrame()
+                # Pull detailed history for specific client
+                client_loans_det = df_loans[df_loans['client_id'] == selected_id] if not df_loans.empty else pd.DataFrame()
+                
+                if not client_loans_det.empty and not df_payments.empty:
+                    client_payments_det = df_payments[df_payments['loan_id'].isin(client_loans_det['id'])]
+                else:
+                    client_payments_det = pd.DataFrame()
 
-            col1, col2, col3 = st.columns(3)
+                col1, col2, col3 = st.columns(3)
 
-            total_loans = client_loans['principal_amount'].sum() if not client_loans.empty else 0
-            balance = client_loans['balance_remaining'].sum() if not client_loans.empty else 0
-            paid = client_payments['amount_paid'].sum() if not client_payments.empty else 0
+                t_borrowed = client_loans_det['principal_amount'].sum() if not client_loans_det.empty else 0
+                t_balance = client_loans_det['balance_remaining'].sum() if not client_loans_det.empty else 0
+                t_paid = client_payments_det['amount_paid'].sum() if not client_payments_det.empty else 0
 
-            col1.metric("💰 Borrowed", f"{total_loans:,.0f}")
-            col2.metric("📥 Paid", f"{paid:,.0f}")
-            col3.metric("📉 Balance", f"{balance:,.0f}")
+                col1.metric("💰 Borrowed", f"{t_borrowed:,.0f}")
+                col2.metric("📥 Paid", f"{t_paid:,.0f}")
+                col3.metric("📉 Balance", f"{t_balance:,.0f}")
 
-            # --- MINI STATEMENT ---
-            st.write("#### 📑 Recent Transactions")
+                # --- MINI STATEMENT ---
+                st.write("#### 📑 Recent Transactions")
 
-            if not client_payments.empty:
-                st.dataframe(
-                    client_payments.sort_values("payment_date", ascending=False)[
-                        ["payment_date", "amount_paid", "payment_method"]
-                    ],
-                    use_container_width=True,
-                    hide_index=True
-                )
-            else:
-                st.info("No transactions yet.")
+                if not client_payments_det.empty:
+                    st.dataframe(
+                        client_payments_det.sort_values("payment_date", ascending=False)[
+                            ["payment_date", "amount_paid", "payment_method"]
+                        ],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.info("No transactions found for this borrower.")
 
-            # --- RISK ALERT ---
-            st.write("---")
-            if balance > 0 and paid < total_loans * 0.3:
-                st.error("🚨 High Risk Client - Low repayment behavior detected.")
-            else:
-                st.success("✅ Client is performing well.")
+                # --- RISK ALERT ---
+                if t_balance > 0 and t_paid < t_borrowed * 0.3:
+                    st.error("🚨 High Risk Client - Low repayment behavior detected.")
+                elif t_borrowed > 0:
+                    st.success("✅ Client is performing well.")
 
         else:
-            st.info("No clients found.")
+            st.info("No clients found in your database.")
 
 
 
