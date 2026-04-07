@@ -703,94 +703,70 @@ if page == "💵 Loans":
                         st.error(f"❌ System Error: {str(e)}")
     import streamlit as st
 
-# --- TAB 2: LOAN BOOK with Edit and Delete ---
-with tab2:
-    st.markdown("### 📊 Active Loan Portfolio")
+# --- 4. TAB 2: LOAN BOOK ---
+    with tab2:
+        st.markdown("### 📊 Active Loan Portfolio")
 
-    if not df_loans.empty:
-        df_loans['principal_amount'] = pd.to_numeric(df_loans['principal_amount'], errors='coerce').fillna(0)
-        df_loans['balance_remaining'] = pd.to_numeric(df_loans['balance_remaining'], errors='coerce').fillna(0)
+        if not df_loans.empty:
+            # Clean data for display
+            df_loans['principal_amount'] = pd.to_numeric(df_loans['principal_amount'], errors='coerce').fillna(0)
+            df_loans['balance_remaining'] = pd.to_numeric(df_loans['balance_remaining'], errors='coerce').fillna(0)
 
-        # Display loans with edit and delete options
-        for idx, loan in df_loans.iterrows():
-            st.markdown(f"#### Loan ID: {loan['id']} | Client ID: {loan['client_id']}")
+            # --- DISPLAY TABLE ---
+            st.dataframe(
+                df_loans[["id", "principal_amount", "balance_remaining", "loan_status"]],
+                use_container_width=True,
+                hide_index=True
+            )
 
-            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+            # --- PORTFOLIO METRICS ---
+            total_portfolio = df_loans['balance_remaining'].sum()
+            avg_loan = df_loans['principal_amount'].mean()
 
-            # Show loan details
-            with col1:
-                st.write(f"Principal: {loan['principal_amount']:,.0f} UGX")
-                st.write(f"Balance: {loan['balance_remaining']:,.0f} UGX")
-                st.write(f"Status: {loan['loan_status']}")
-
-            # Edit button
-            if col2.button(f"✏️ Edit##{loan['id']}"):
-                st.session_state['edit_loan_id'] = loan['id']
-
-            # Delete button
-            if col3.button(f"🗑️ Delete##{loan['id']}"):
-                st.session_state['delete_loan_id'] = loan['id']
+            p1, p2 = st.columns(2)
+            p1.metric("💼 Total Portfolio", f"{total_portfolio:,.0f} UGX")
+            p2.metric("📌 Avg Loan Size", f"{avg_loan:,.0f} UGX")
 
             st.write("---")
 
-        # --- Edit Loan Form ---
-        if 'edit_loan_id' in st.session_state:
-            loan_to_edit = df_loans[df_loans['id'] == st.session_state['edit_loan_id']].iloc[0]
-            st.markdown(f"### ✏️ Editing Loan ID: {loan_to_edit['id']}")
+            # --- EDIT & DELETE ENGINE ---
+            st.subheader("🛠️ Manage Existing Loans")
+            
+            # Create a selection list
+            loan_options = {f"Loan ID: {l['id']} | Bal: {float(l['balance_remaining']):,.0f}": l for l in loans}
+            selected_loan_label = st.selectbox("Select a Loan to Modify:", list(loan_options.keys()))
+            selected_loan = loan_options[selected_loan_label]
 
-            with st.form("edit_loan_form"):
-                principal = st.number_input("Principal Amount", min_value=0, value=float(loan_to_edit['principal_amount']))
-                interest_rate = st.number_input("Interest Rate %", min_value=0.0, value=loan_to_edit.get('interest_rate', 0.0))
-                duration = st.number_input("Duration (months)", min_value=1, value=loan_to_edit.get('duration_months', 6))
-                status = st.selectbox("Loan Status", ["Active", "Closed", "Defaulted"], index=["Active", "Closed", "Defaulted"].index(loan_to_edit.get('loan_status', "Active")))
+            edit_col, del_col = st.columns(2)
 
-                submit_edit = st.form_submit_button("💾 Save Changes")
-                cancel_edit = st.form_submit_button("❌ Cancel")
+            # --- EDIT SECTION ---
+            with edit_col:
+                with st.expander("📝 Edit Loan Details"):
+                    with st.form(f"edit_form_{selected_loan['id']}"):
+                        new_principal = st.number_input("Principal (UGX)", value=float(selected_loan['principal_amount']))
+                        new_status = st.selectbox("Status", ["Active", "Overdue", "Settled"], 
+                                                index=["Active", "Overdue", "Settled"].index(selected_loan['loan_status']))
+                        
+                        if st.form_submit_button("💾 Save Changes"):
+                            supabase.table("loans").update({
+                                "principal_amount": new_principal,
+                                "loan_status": new_status
+                            }).eq("id", selected_loan['id']).execute()
+                            
+                            st.success("Loan updated!")
+                            st.rerun()
 
-            if submit_edit:
-                # Recalculate total repayable and monthly installment if you want
-                total_repayable, monthly_installment = calculate_loan(principal, interest_rate, duration)
-
-                updated_loan = {
-                    "principal_amount": principal,
-                    "interest_rate": interest_rate,
-                    "duration_months": duration,
-                    "total_repayable": total_repayable,
-                    "monthly_installment": monthly_installment,
-                    "loan_status": status
-                }
-
-                try:
-                    supabase.table("loans").update(updated_loan).eq("id", loan_to_edit['id']).execute()
-                    st.success("✅ Loan updated successfully!")
-                    del st.session_state['edit_loan_id']
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"❌ Failed to update loan: {e}")
-
-            if cancel_edit:
-                del st.session_state['edit_loan_id']
-                st.experimental_rerun()
-
-        # --- Delete Confirmation ---
-        if 'delete_loan_id' in st.session_state:
-            loan_to_delete = df_loans[df_loans['id'] == st.session_state['delete_loan_id']].iloc[0]
-            st.markdown(f"### 🗑️ Confirm Delete Loan ID: {loan_to_delete['id']}")
-
-            if st.button("Confirm Delete"):
-                try:
-                    supabase.table("loans").delete().eq("id", loan_to_delete['id']).execute()
-                    st.success("✅ Loan deleted successfully!")
-                    del st.session_state['delete_loan_id']
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"❌ Failed to delete loan: {e}")
-
-            if st.button("Cancel"):
-                del st.session_state['delete_loan_id']
-                st.experimental_rerun()
-    else:
-        st.info("No loans issued yet.")
+            # --- DELETE SECTION ---
+            with del_col:
+                with st.expander("🗑️ Danger Zone"):
+                    st.warning(f"Are you sure you want to delete Loan {selected_loan['id']}?")
+                    if st.button("🔥 Permanently Delete Loan", key=f"del_{selected_loan['id']}"):
+                        # Logic: Delete from Supabase
+                        supabase.table("loans").delete().eq("id", selected_loan['id']).execute()
+                        st.error("Loan deleted from registry.")
+                        st.rerun()
+        else:
+            st.info("No loans issued yet.")
 if page == "🛡️ Collateral":
     st.title(f"🛡️ {active_company['name']} | Asset Security Registry")
     
