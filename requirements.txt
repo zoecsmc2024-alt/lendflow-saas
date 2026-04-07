@@ -2,3 +2,7 @@ streamlit
 st-supabase-connection
 streamlit-option_menu
 pandas
+streamlit
+supabase
+plotly
+pandas
