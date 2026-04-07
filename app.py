@@ -139,23 +139,28 @@ def get_dashboard_metrics(company_id):
     return loans, payments, expenses
 
 # --- 4. AUTH & SIDEBAR NAVIGATION ---
-companies_res = supabase.table("companies").select("id, name, brand_color").execute()
+companies_res = supabase.table("companies").select("id, name, brand_color, logo_url").execute()
 company_list = {c['name']: c for c in companies_res.data}
 
 with st.sidebar:
-    # 1. THE LOGO (Dynamic)
-    if active_company.get('logo_url'):
-        st.image(active_company['logo_url'], use_container_width=True)
-    
-    st.info(f"📍 Mode: {active_company['name']}")
+    st.title("🌍 Peak-Lenders Africa")
     st.write("---")
 
-    # 2. PORTAL SWITCHER
+    # --- STEP 1: DEFINE THE VARIABLE FIRST ---
+    # We must create 'active_company' before we can ask it for a logo!
     active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
     active_company = company_list[active_company_name]
     
     # Apply theme
     apply_custom_theme(active_company['brand_color'])
+
+    # --- STEP 2: NOW USE THE VARIABLE ---
+    # Now Python knows what 'active_company' is, so it won't crash!
+    if active_company.get('logo_url'):
+        st.image(active_company['logo_url'], use_container_width=True)
+    
+    st.info(f"📍 Mode: {active_company['name']}")
+    st.write("---")
 
     # --- STEP 3: NAVIGATION ---
     st.caption("STRATEGY & GROWTH")
@@ -166,6 +171,10 @@ with st.sidebar:
     
     st.caption("BACK OFFICE")
     page_admin = st.radio("Admin", ["📂 Expenses", "📄 Payroll", "📄 Ledger", "⚙️ Settings"], label_visibility="collapsed")
+
+    # This ensures 'page' variable exists for your switchboard
+    # Logic: if user clicks something in Admin, that becomes the active 'page'
+    page = page_main # Default starting point
     # --- THE MAGIC MERGE ---
     # This logic detects which section you last clicked
     # We use session state to remember the last choice
