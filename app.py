@@ -158,13 +158,12 @@ with st.sidebar:
     # Apply theme
     apply_custom_theme(active_company['brand_color'])
 
-    # Display company logo (Safe from NameError!)
+    # Display company logo as a small sleek icon
     if active_company.get('logo_url'):
-        st.image(active_company['logo_url'], use_container_width=50)
+        # We use width=80 (or 100) to keep it subtle and professional
+        st.image(active_company['logo_url'], width=80) 
     
     st.info(f"📍 Mode: {active_company['name']}")
-    st.write("---")
-
     # --- STEP 2: Single List Navigation ---
     menu_options = [
         "📈 Overview", "🧾 Reports", "👥 Clients", 
