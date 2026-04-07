@@ -791,7 +791,7 @@ with tab2:
                 st.experimental_rerun()
     else:
         st.info("No loans issued yet.")
-elif page == "🛡️ Collateral":
+if page == "🛡️ Collateral":
     st.title(f"🛡️ {active_company['name']} | Asset Security Registry")
     
     # 1. Fetch Active Loans to link collateral
