@@ -82,133 +82,106 @@ def calculate_loan(principal, rate, months):
 def get_data(table, company_id):
     return supabase.table(table).select("*").eq("company_id", company_id).execute().data
 
-# --- 5. SIDEBAR & AUTH SIMULATION ---
-# --- SIMULATED LOGIN (For Development) ---
+# --- 1. SETTINGS & AUTH (The Brain) ---
 companies_res = supabase.table("companies").select("id, name, brand_color").execute()
 company_list = {c['name']: c for c in companies_res.data}
 
 with st.sidebar:
+    st.title("🌍 Peak-Lenders Africa")
     st.write("---")
-    st.subheader("🏢 Switch Company View")
+    
+    # Selecting the Company/Tenant
     active_company_name = st.selectbox("Log in as:", list(company_list.keys()))
     active_company = company_list[active_company_name]
     
-    # APPLY BRANDING DYNAMICALLY
+    # Applying branding immediately
     apply_custom_theme(active_company['brand_color'])
-    st.success(f"Viewing: {active_company['name']}")
-
-# --- 2. THE CLIENT REGISTRY PAGE ---
-st.title(f"👥 {active_company['name']} | Client Registry")
-
-tab1, tab2 = st.tabs(["➕ Register New Client", "📋 Active Client Database"])
-
-with tab1:
-    with st.form("client_onboarding", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        f_name = col1.text_input("Full Name / Business Name")
-        id_no = col2.text_input("National ID / Passport No.")
-        
-        phone = col1.text_input("Phone Number (Mobile Money)")
-        email = col2.text_input("Email Address")
-        
-        occ = col1.text_input("Occupation / Industry")
-        addr = col2.text_area("Physical Address", height=68)
-        
-        if st.form_submit_button("🛡️ Securely Register Client"):
-            if f_name and id_no:
-                # DATA LINKED TO THE ACTIVE COMPANY
-                client_data = {
-                    "company_id": active_company['id'],
-                    "full_name": f_name,
-                    "id_number": id_no,
-                    "phone_number": phone,
-                    "email": email,
-                    "occupation": occ,
-                    "address": addr
-                }
-                res = supabase.table("clients").insert(client_data).execute()
-                if res.data:
-                    st.success(f"✅ {f_name} has been added to your secure database.")
-                    st.rerun()
-
-with tab2:
-    st.write("### Searchable Client Base")
-    # FETCH ONLY THIS COMPANY'S CLIENTS
-    clients_res = supabase.table("clients").select("*").eq("company_id", active_company['id']).execute()
     
-    if clients_res.data:
-        df_clients = pd.DataFrame(clients_res.data)
-        # Clean up for display
-        display_df = df_clients[["full_name", "id_number", "phone_number", "occupation"]]
-        display_df.columns = ["Name", "ID Number", "Contact", "Occupation"]
-        
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("No clients registered yet for this company.")
+    st.success(f"Mode: {active_company['name']}")
+    st.write("---")
     
-    page = st.radio("Navigation", ["📈 Overview", "👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral", "📂 Expenses", "📄 Payroll", "📄 Ledger", "🧾 Reports"])
+    # GLOBAL NAVIGATION (Always visible here!)
+    page = st.radio("Navigation Menu", [
+        "📈 Overview", 
+        "👥 Clients", 
+        "💵 Loans", 
+        "💰 Payments", 
+        "🚨 Overdue", 
+        "🛡️ Collateral", 
+        "📂 Expenses", 
+        "📄 Payroll", 
+        "📄 Ledger", 
+        "🧾 Reports"
+    ])
 
-# --- 6. PAGE LOGIC: DASHBOARD ---
+# --- 2. THE SWITCHBOARD (Only shows the selected page) ---
+
 if page == "📈 Overview":
     st.title(f"📈 {active_company['name']} | Executive Overview")
     
-    # 1. Fetch the Data
+    # Fetch Data
     loans, payments, expenses = get_dashboard_metrics(active_company['id'])
     
     if not loans:
-        st.info("Welcome to Peak-Lenders! Start by registering a client and issuing your first loan.")
+        st.info("Welcome! Start by registering a client and issuing your first loan.")
     else:
-        # --- MATH ENGINE ---
-        total_principal = sum(float(l['principal_amount']) for l in loans)
+        # Dashboard Math
         total_balance = sum(float(l['balance_remaining']) for l in loans)
         total_collected = sum(float(p['amount_paid']) for p in payments)
         total_opex = sum(float(e['amount']) for e in expenses)
-        
-        # Interest Earned = (Total Repayable - Principal) for settled/active parts
-        # For this dashboard, let's look at Cash Flow:
-        net_cash_position = total_collected - total_opex
+        net_cash = total_collected - total_opex
 
-        # --- SECTION 1: THE BIG THREE ---
+        # Metrics Row
         c1, c2, c3 = st.columns(3)
-        c1.metric("Active Portfolio (PAR)", f"{total_balance:,.0f} UGX", help="Total money currently owed by clients.")
-        c2.metric("Total Collections", f"{total_collected:,.0f} UGX", delta="Revenue In")
-        c3.metric("Net Cash Position", f"{net_cash_position:,.0f} UGX", delta="- Expenses", delta_color="normal")
+        c1.metric("Active Portfolio (PAR)", f"{total_balance:,.0f} UGX")
+        c2.metric("Total Collections", f"{total_collected:,.0f} UGX")
+        c3.metric("Net Cash Position", f"{net_cash:,.0f} UGX")
 
+        # Visuals
         st.write("---")
-
-        # --- SECTION 2: VISUAL ANALYTICS ---
         col_left, col_right = st.columns(2)
-        
         with col_left:
-            st.write("### 🗠 Loan Status Distribution")
-            df_loans = pd.DataFrame(loans)
-            fig_status = px.pie(df_loans, names='loan_status', values='balance_remaining', 
-                                color_discrete_map={'Active': active_company['brand_color'], 'Overdue': '#D32F2F', 'Settled': '#2E7D32'},
-                                hole=.5)
+            fig_status = px.pie(pd.DataFrame(loans), names='loan_status', values='balance_remaining', hole=.5,
+                                color_discrete_map={'Active': active_company['brand_color'], 'Overdue': '#D32F2F'})
             st.plotly_chart(fig_status, use_container_width=True)
-
         with col_right:
-            st.write("### 💸 Expense Breakdown")
             if expenses:
-                df_exp = pd.DataFrame(expenses)
-                fig_exp = px.bar(df_exp, x='category', y='amount', 
-                                 color_discrete_sequence=[active_company['brand_color']])
-                st.plotly_chart(fig_exp, use_container_width=True)
-            else:
-                st.caption("No expenses logged yet.")
+                st.plotly_chart(px.bar(pd.DataFrame(expenses), x='category', y='amount'), use_container_width=True)
 
-        # --- SECTION 3: RECENT ACTIVITY ---
-        st.write("---")
-        st.subheader("🔔 Recent System Alerts")
-        
-        # Logical Alert: High Risk
-        overdue_count = len([l for l in loans if l['loan_status'] == 'Overdue'])
-        if overdue_count > 0:
-            st.error(f"🚩 ATTENTION: You have {overdue_count} loans currently in OVERDUE status. Visit the Overdue Tracker to apply rollovers.")
-        
-        # Logical Alert: Collections
-        if total_collected > total_principal * 0.1:
-            st.success(f"✅ POSITIVE TREND: You have recovered over 10% of your total disbursed principal.")
+elif page == "👥 Clients":
+    st.title(f"👥 {active_company['name']} | Client Registry")
+    
+    tab1, tab2 = st.tabs(["➕ Register New Client", "📋 Active Client Database"])
+
+    with tab1:
+        with st.form("client_onboarding", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            f_name = col1.text_input("Full Name / Business Name")
+            id_no = col2.text_input("National ID / Passport No.")
+            phone = col1.text_input("Phone Number")
+            email = col2.text_input("Email Address")
+            
+            if st.form_submit_button("🛡️ Securely Register Client"):
+                if f_name and id_no:
+                    client_data = {
+                        "company_id": active_company['id'],
+                        "full_name": f_name,
+                        "id_number": id_no,
+                        "phone_number": phone,
+                        "email": email
+                    }
+                    supabase.table("clients").insert(client_data).execute()
+                    st.success(f"✅ {f_name} added!")
+                    st.rerun()
+
+    with tab2:
+        clients_res = supabase.table("clients").select("*").eq("company_id", active_company['id']).execute()
+        if clients_res.data:
+            st.dataframe(pd.DataFrame(clients_res.data)[["full_name", "id_number", "phone_number"]], use_container_width=True)
+        else:
+            st.info("No clients found.")
+
+
 
 # --- 7. PAGE LOGIC: CLIENTS ---
 elif page == "👥 Clients":
