@@ -532,7 +532,7 @@ def signup_page(supabase):
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
-                    "options": {"data": {"company_code": company, "role": "Admin"}}
+                    "options": {"data": {"company_code": company, "role": "admin"}}
                 })
                 
                 if res.user:
