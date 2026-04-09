@@ -133,7 +133,25 @@ def create_pdf(html_content):
     pdf_buffer = io.BytesIO()
     pisa.CreatePDF(io.StringIO(html_content), dest=pdf_buffer)
     return pdf_buffer.getvalue()
+@st.cache_data(ttl=600)
+def get_cached_data(table_name):
+    try:
+        # Check if we even have a tenant_id yet
+        t_id = st.session_state.get('tenant_id')
+        if not t_id:
+            return pd.DataFrame() # Return empty if not logged in
 
+        response = supabase.table(table_name).select("*").eq("tenant_id", t_id).execute()
+        
+        # If Supabase returns data, make a DataFrame
+        if response.data:
+            df = pd.DataFrame(response.data)
+            return df
+        return pd.DataFrame()
+    except Exception as e:
+        # This prevents the "Oh No" screen by just showing an error in the UI instead
+        st.error(f"Database Error on {table_name}: {e}")
+        return pd.DataFrame()
 @st.cache_data(ttl=3600)
 def get_logo():
     """
