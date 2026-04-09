@@ -2378,3 +2378,47 @@ def show_settings():
             
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
+
+
+# ==========================================
+# 7. MAIN APP EXECUTION
+# ==========================================
+
+# 1. Check if user is logged in
+if not st.session_state.get("logged_in", False):
+    # If not logged in, show the Member Access screen
+    login_page(supabase)
+else:
+    # If logged in, show the Dashboard Navigation
+    
+    # Define your menu again (or import it)
+    menu = {
+        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
+        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
+        "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
+        "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
+    }
+    
+    # 2. Setup Sidebar
+    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+    
+    with st.sidebar:
+        st.title(f"🏢 {st.session_state.get('company', 'Zoe Consults')}")
+        current_page = st.radio("Main Menu", menu_options)
+        
+        st.divider()
+        if st.button("🚪 Logout", use_container_width=True):
+            logout()
+            st.rerun()
+
+    # 3. Routing Logic
+    if "Overview" in current_page:
+        show_overview()
+    elif "Payroll" in current_page:
+        # Example of applying the RBAC you organized
+        require_role(["admin", "manager"])
+        show_payroll()
+    elif "Settings" in current_page:
+        require_role(["admin"])
+        show_settings()
+    # ... add other elif statements for your functions here
