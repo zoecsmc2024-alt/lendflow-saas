@@ -8,3 +8,9 @@ twilio
 fpdf2
 streamlit-calendar
 xhtml2pdf
+streamlit-option-menu
+xlsxwriter
+streamlit-aggrid
+twilio
+reportlab
+jinja2
