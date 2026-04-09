@@ -218,28 +218,38 @@ SESSION_TIMEOUT = 15  # Minutes
 # 🎨 GLOBAL UI STYLING (Buttons + Checkbox)
 # ==========================================
 st.markdown("""
-    <style>
-    /* Login Button */
-    div.stButton > button:first-child {
-        background-color: #4CAF50;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        height: 3em;
-    }
+<style>
+/* Main buttons */
+div.stButton > button {
+    height: 42px;
+    padding: 0 18px;
+    font-size: 14px;
+    border-radius: 8px;
+}
 
-    /* Hover effect */
-    div.stButton > button:hover {
-        background-color: #45a049;
-        color: white;
-    }
+/* Small secondary buttons */
+.small-btn button {
+    height: 32px !important;
+    font-size: 12px !important;
+    padding: 0 12px !important;
+    border-radius: 6px !important;
+    background-color: #f0f2f6;
+    color: #333;
+    border: 1px solid #ddd;
+}
 
-    /* Remember Me Checkbox */
-    div[data-testid="stCheckbox"] > label {
-        color: #1f77b4;
-        font-weight: 600;
-    }
-    </style>
+/* Center helper */
+.center-btn {
+    display: flex;
+    justify-content: center;
+    margin-top: 5px;
+}
+
+/* Spacing */
+.block-container {
+    padding-top: 2rem;
+}
+</style>
 """, unsafe_allow_html=True)
 
 
@@ -467,10 +477,12 @@ def login_page(supabase):
         password = st.text_input("🔑 Password", type="password")
         remember = st.checkbox("Remember me")
 
-        if st.button("🚀 Login", use_container_width=True):
+        st.markdown('<div class="center-btn">', unsafe_allow_html=True)
+        if st.button("🚀 Login"):
             if not all([company, email, password]):
                 st.warning("Fill all fields")
                 return
+                st.markdown('</div>', unsafe_allow_html=True)
 
             # Call the auth logic
             auth_result = authenticate(supabase, company, email, password)
@@ -487,28 +499,25 @@ def login_page(supabase):
         # --- NEW SECTION: Small Toggle & Reset Buttons ---
         st.markdown("---") 
 
-        # --- THE FIX: Centered Small Buttons ---
-        # We use a container to apply centering style
         btn_col1, btn_col2 = st.columns(2)
 
         with btn_col1:
-            # This creates a centered "pocket" for the button
-            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+            st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
             if st.button("❓ Forgot", key="btn_forgot"):
                 st.session_state.show_reset = True
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
         with btn_col2:
-            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
+            st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
             if st.button("🆕 Sign Up", key="btn_signup"):
                 st.session_state.auth_mode = "Sign Up"
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # Handle the Password Reset View
-    if st.session_state.get("show_reset"):
-        reset_password_ui(supabase)
+        # Handle the Password Reset View
+        if st.session_state.get("show_reset"):
+            reset_password_ui(supabase)
 
 
 def signup_page(supabase):
@@ -521,34 +530,37 @@ def signup_page(supabase):
         email = st.text_input("📧 Email", key="signup_email").strip().lower()
         password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
-        if st.button("🚀 Create Account", use_container_width=True):
+        # Fixed: Wrapping only the button in the div, not the logic
+        st.markdown('<div class="center-btn">', unsafe_allow_html=True)
+        signup_clicked = st.button("🚀 Create Account")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if signup_clicked:
             if not all([company, email, password]):
                 st.warning("Fill all fields")
-                return
-
-            try:
-                res = supabase.auth.sign_up({
-                    "email": email,
-                    "password": password,
-                    "options": {
-                        "data": {
-                            "company_code": company,
-                            "role": "Admin"  # first user becomes Admin
+            else:
+                try:
+                    res = supabase.auth.sign_up({
+                        "email": email,
+                        "password": password,
+                        "options": {
+                            "data": {
+                                "company_code": company,
+                                "role": "Admin"  # first user becomes Admin
+                            }
                         }
-                    }
-                })
-
-                st.success("Account created! You can now log in.")
-                st.info("If email confirmation is ON, check your inbox.")
-
-            except Exception as e:
-                st.error(f"Signup failed: {str(e)}")
+                    })
+                    st.success("Account created! You can now log in.")
+                    st.info("If email confirmation is ON, check your inbox.")
+                except Exception as e:
+                    st.error(f"Signup failed: {str(e)}")
         
         # Missing Feature: Back to Login
-        if st.button("⬅️ Back to Login", use_container_width=True):
+        st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
+        if st.button("⬅️ Back to Login"):
             st.session_state.auth_mode = "Login"
             st.rerun()
-
+        st.markdown('</div>', unsafe_allow_html=True)
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
