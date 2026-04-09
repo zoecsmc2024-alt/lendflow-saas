@@ -501,19 +501,20 @@ def login_page(supabase):
 
         btn_col1, btn_col2 = st.columns(2)
 
-        # SMALL CENTERED BUTTONS
+        # Center buttons for Forgot and Sign Up
         btn_col1, btn_col2 = st.columns(2)
+        
         with btn_col1:
             st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
-            if st.button("❓ Forgot", key="btn_forgot"):
-                st.session_state.view = "reset" # Changes view
+            if st.button("❓ Forgot", key="login_forgot"):
+                st.session_state.view = "reset" # Cleanly switches to reset page
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
         with btn_col2:
             st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
-            if st.button("🆕 Sign Up", key="btn_signup"):
-                st.session_state.view = "signup" # This makes the button "respond"
+            if st.button("🆕 Sign Up", key="login_signup"):
+                st.session_state.view = "signup" # Cleanly switches to signup page
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
         # Handle the Password Reset View
@@ -2536,22 +2537,21 @@ else:
         show_settings()
     # ... add other elif statements for your functions here
 
-# 1. Initialize the view state if it doesn't exist
+# Initialize the view state
 if "view" not in st.session_state:
     st.session_state.view = "login"
 
-# 2. The Router Logic
+# Ensure the app only draws ONE of these at a time
 if not st.session_state.get("logged_in"):
     if st.session_state.view == "login":
         login_page(supabase)
     elif st.session_state.view == "signup":
         signup_page(supabase)
     elif st.session_state.view == "reset":
-        # This keeps the reset UI on its own clean page
         reset_password_ui(supabase)
         if st.button("⬅️ Back to Login"):
             st.session_state.view = "login"
             st.rerun()
 else:
-    st.success("You are logged in!")
-    # Call your main dashboard function here
+    # Your Zoe Consults Main Dashboard goes here
+    st.write(f"Logged in to {st.session_state.company}")
