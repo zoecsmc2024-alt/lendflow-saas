@@ -501,20 +501,21 @@ def login_page(supabase):
 
         btn_col1, btn_col2 = st.columns(2)
 
+        # SMALL CENTERED BUTTONS
+        btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
             st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
             if st.button("❓ Forgot", key="btn_forgot"):
-                st.session_state.show_reset = True
+                st.session_state.view = "reset" # Changes view
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
         with btn_col2:
             st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
             if st.button("🆕 Sign Up", key="btn_signup"):
-                st.session_state.auth_mode = "Sign Up"
+                st.session_state.view = "signup" # This makes the button "respond"
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
-
         # Handle the Password Reset View
         if st.session_state.get("show_reset"):
             reset_password_ui(supabase)
@@ -2534,3 +2535,23 @@ else:
         require_role(["admin"])
         show_settings()
     # ... add other elif statements for your functions here
+
+# 1. Initialize the view state if it doesn't exist
+if "view" not in st.session_state:
+    st.session_state.view = "login"
+
+# 2. The Router Logic
+if not st.session_state.get("logged_in"):
+    if st.session_state.view == "login":
+        login_page(supabase)
+    elif st.session_state.view == "signup":
+        signup_page(supabase)
+    elif st.session_state.view == "reset":
+        # This keeps the reset UI on its own clean page
+        reset_password_ui(supabase)
+        if st.button("⬅️ Back to Login"):
+            st.session_state.view = "login"
+            st.rerun()
+else:
+    st.success("You are logged in!")
+    # Call your main dashboard function here
