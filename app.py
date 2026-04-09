@@ -518,17 +518,17 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. Check if company exists
+                # 1. Check if the company already exists
                 check = supabase.table("companies").select("*").eq("company_code", company).execute()
                 
                 if not check.data:
-                    # 2. Create the company on the fly so the user can join it
+                    # 2. If it's a new client, create the company record first
                     supabase.table("companies").insert({
                         "company_code": company, 
                         "company_name": company.capitalize()
                     }).execute()
                 
-                # 3. Sign up the user
+                # 3. Now sign up the user—the database will now accept the link!
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
@@ -541,9 +541,11 @@ def signup_page(supabase):
                     st.error("❌ Signup failed. Please try a different email.")
 
             except Exception as e:
+                # Catch the specific error you were seeing earlier
                 st.error(f"🚨 Database Error: {str(e)}")
 
-    if st.button("⬅️ Back to Login", key="back_to_login_final"):
+    # Your now-functional navigation button
+    if st.button("⬅️ Back to Login", key="back_nav"):
         st.session_state.view = "login"
         st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
