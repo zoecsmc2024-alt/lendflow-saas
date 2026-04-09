@@ -546,7 +546,7 @@ def signup_page(supabase):
     if st.button("⬅️ Back to Login", key="back_to_login_final"):
         st.session_state.view = "login"
         st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
