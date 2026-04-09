@@ -1295,3 +1295,119 @@ def show_collateral():
                     st.warning("⚠️ Asset record deleted."); st.rerun()
         else:
             st.info("💡 No collateral registered yet.")
+
+
+# ==============================
+# 16. COLLECTIONS & OVERDUE TRACKER (The Master Engine)
+# ==============================
+def show_overdue_tracker():
+    st.markdown("### 🚨 Loan Overdue & Rollover Tracker")
+
+    # 1. --- THE SaaS REFRESH (Now targeting Supabase) ---
+    if st.button("🔄 Sync with Database", use_container_width=True):
+        with st.spinner("🧹 Re-syncing tenant data..."):
+            st.cache_data.clear() 
+            st.session_state.loans = get_cached_data("loans")
+            st.rerun()
+
+    # --- LOAD NECESSARY DATA ---
+    loans = get_cached_data("loans")
+    today = datetime.now()
+
+    if loans.empty:
+        st.info("💡 No active loan records found. The system is currently clear!")
+        return
+
+    # 2. --- PREP OVERDUE DATA (Logic Intact) ---
+    loans_work = loans.copy()
+    # Normalize headers for math
+    loans_work.columns = loans_work.columns.str.strip().str.replace(" ", "_")
+    loans_work['end_date'] = pd.to_datetime(loans_work['end_date'], errors='coerce')
+    
+    overdue_df = loans_work[
+        (loans_work['status'].isin(["Active", "Overdue", "Rolled/Overdue"])) & 
+        (loans_work['end_date'] < today)
+    ].copy()
+
+    # 3. --- ROLLOVER BUTTON (The History-Building Engine) ---
+    st.markdown("---") 
+    if st.button("🔄 Execute Monthly Rollover (Compound All)", use_container_width=True):
+        new_rows_list = []
+        count = 0
+        
+        try: 
+            # TARGETS: Logic preserved exactly
+            targets = loans_work[loans_work['status'] == "Pending"].copy()
+            if targets.empty:
+                targets = overdue_df.copy()
+
+            if targets.empty:
+                st.info("No loans currently require a rollover cycle.")
+            else:
+                for i, r in targets.iterrows():
+                    # 1. Archive the old row via Supabase Update
+                    supabase.table("loans").update({"status": "BCF"}).eq("id", r['id']).execute()
+
+                    # 2. THE ULTIMATE MATH FIX (Preserved Exactly)
+                    old_p = float(r.get('principal', 0))
+                    old_i = float(r.get('interest', 0))
+                    
+                    # New Basis = 514,000 (Old P + Old I)
+                    new_basis = old_p + old_i
+                    # New Interest = 3% of new basis
+                    new_month_interest = new_basis * 0.03
+                    compounded_balance = new_basis + new_month_interest
+                    
+                    # Date Math
+                    orig_end = pd.to_datetime(r['end_date'], errors='coerce')
+                    new_start = orig_end if pd.notna(orig_end) else datetime.now()
+                    new_end = new_start + pd.DateOffset(months=1)
+
+                    # 3. Create New Cycle Row (Adding tenant_id)
+                    new_row = {
+                        "borrower": r['borrower'],
+                        "loan_id": r.get('loan_id', r['id']), # Preserve original Loan ID link
+                        "start_date": new_start.strftime('%Y-%m-%d'),
+                        "end_date": new_end.strftime('%Y-%m-%d'),
+                        "principal": new_basis,
+                        "interest": new_month_interest,
+                        "total_repayable": compounded_balance,
+                        "amount_paid": 0,
+                        "status": "Pending",
+                        "tenant_id": st.session_state.tenant_id
+                    }
+                    new_rows_list.append(new_row)
+                    count += 1
+
+                if new_rows_list:
+                    # Save all new cycles to Supabase
+                    supabase.table("loans").insert(new_rows_list).execute()
+                    st.success(f"✅ Compounding Successful! Added {count} cycles.")
+                    st.cache_data.clear() 
+                    st.rerun()
+
+        except Exception as e:
+            st.error(f"🚨 Rollover Error: {str(e)}")
+
+    # 4. --- TABLE DISPLAY (Branded & Formatted Styles Preserved) ---
+    def style_status_colors(s):
+        if s == "BCF": return "background-color: #FFA500; color: white;" 
+        if s == "Pending": return "background-color: #D32F2F; color: white;" 
+        if s == "Closed": return "background-color: #2E7D32; color: white;" 
+        return ""
+
+    st.markdown("### 🏦 All Loan Records")
+    
+    # Sort for historical view
+    display_df = loans_work.sort_values(by=['borrower', 'start_date'], ascending=[True, True])
+    
+    # Push Status to end for Luxe view
+    cols = [c for c in display_df.columns if c != 'status'] + ['status']
+    display_df = display_df[cols]
+
+    # Currency Formatting Logic
+    fmt_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
+    actual_fmt = {k: "{:,.0f}" for k in fmt_cols if k in display_df.columns}
+
+    styled_df = display_df.style.map(style_status_colors, subset=['status']).format(actual_fmt)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
