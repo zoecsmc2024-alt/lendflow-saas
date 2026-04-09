@@ -3,7 +3,6 @@ pandas
 numpy
 plotly
 supabase
-twilio
 fpdf2
 streamlit-calendar
 xhtml2pdf
