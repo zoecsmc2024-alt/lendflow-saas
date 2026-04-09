@@ -509,37 +509,46 @@ def login_page(supabase):
 def signup_page(supabase):
     st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
     
-    tenant = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
+    tenant_code = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
     email = st.text_input("📧 Email", key="signup_email").strip().lower()
     password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
     if st.button("🚀 Create Account", use_container_width=True):
-        if not all([tenant, email, password]):
+        if not all([tenant_code, email, password]):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. FIX: Variable name must match the check below
-                check = supabase.table("tenants").select("*").eq("company_code", tenant).execute()
+                # 1. Check if the tenant already exists
+                check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
                 
-                # Using 'check.data' now works because 'check' is defined above
-                if not check.data:
-                    # 2. FIX: Column name must match your SQL (your SQL uses 'name', not 'tenant_name')
-                    supabase.table("tenants").insert({
-                        "company_code": tenant, 
-                        "name": tenant.capitalize() 
+                if check.data:
+                    # If exists, grab the existing ID
+                    tenant_id = check.data[0]['id']
+                else:
+                    # If it's a new company, insert it and grab the new ID
+                    new_tenant = supabase.table("tenants").insert({
+                        "company_code": tenant_code, 
+                        "name": tenant_code.capitalize() 
                     }).execute()
+                    tenant_id = new_tenant.data[0]['id']
                 
-                # 3. Sign up the user
+                # 2. Sign up the user with the tenant_id in metadata
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
-                    "options": {"data": {"company_code": tenant, "role": "admin"}}
+                    "options": {
+                        "data": {
+                            "tenant_id": str(tenant_id),
+                            "role": "Admin"
+                        }
+                    }
                 })
                 
                 if res.user:
                     st.success("✅ Welcome! Account created. Check your email for a link.")
                 else:
-                    st.error("❌ Signup failed. Please try a different email.")
+                    # This handles cases like 'User already registered' which returns None
+                    st.error("❌ Signup failed. This email may already be in use.")
 
             except Exception as e:
                 st.error(f"🚨 Database Error: {str(e)}")
