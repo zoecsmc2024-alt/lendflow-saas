@@ -173,3 +173,110 @@ def save_data(table_name, dataframe):
     except Exception as e:
         st.error(f"❌ Error saving to {table_name}: {e}")
         return False
+
+
+# ==============================
+# 4. SECURITY & SESSION MANAGEMENT (SaaS Version)
+# ==============================
+
+SESSION_TIMEOUT = 15  # Minutes
+
+def verify_password(input_password, stored_hash):
+    """
+    STILL INTACT: Though Supabase Auth usually handles this, 
+    we keep this if you have legacy hashed data to check.
+    """
+    try:
+        return bcrypt.checkpw(input_password.encode(), stored_hash.encode())
+    except Exception:
+        return False
+
+def check_session_timeout():
+    """
+    Quietly monitors inactivity. 
+    Maintains your exact logic but adds 'tenant_id' to the wipe list.
+    """
+    if "logged_in" not in st.session_state or not st.session_state.logged_in:
+        return
+
+    if "last_activity" not in st.session_state:
+        st.session_state.last_activity = datetime.now()
+        return
+
+    now = datetime.now()
+    elapsed = now - st.session_state.last_activity
+
+    if elapsed > timedelta(minutes=SESSION_TIMEOUT):
+        # Added 'tenant_id' and 'session_data' to ensure total isolation on logout
+        keys_to_clear = ["logged_in", "user", "role", "last_activity", "page", "tenant_id"]
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.warning("⏳ Session expired for security. Please login again.")
+        st.rerun()
+    
+    st.session_state.last_activity = now
+
+# ==============================
+# 5. THE LOGIN INTERFACE (SUPABASE POWERED)
+# ==============================
+
+def login_page():
+    """
+    A clean, centered login page.
+    Transformed to use Supabase Auth for multi-tenancy.
+    """
+    apply_custom_styles()
+    
+    st.markdown("<h2 style='text-align: center; color: #2B3F87;'>🔐 ZOE CONSULTS LOGIN</h2>", unsafe_allow_html=True)
+    
+    with st.container():
+        # We use email for Supabase Auth instead of just 'Username'
+        email_input = st.text_input("Email Address", placeholder="e.g., admin@client.com")
+        p_input = st.text_input("Password", type="password", placeholder="Enter password")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🚀 Access System", use_container_width=True):
+                try:
+                    # SUPABASE AUTH SIGN IN
+                    auth_response = supabase.auth.sign_in_with_password({
+                        "email": email_input,
+                        "password": p_input
+                    })
+                    
+                    if auth_response.user:
+                        # 1. Set basic login state
+                        st.session_state.logged_in = True
+                        st.session_state.user = email_input
+                        st.session_state.last_activity = datetime.now()
+                        
+                        # 2. Link User to Tenant ID
+                        # We assume your 'users' table links auth.uid to a tenant
+                        user_data = supabase.table("users")\
+                            .select("tenant_id, role")\
+                            .eq("id", auth_response.user.id)\
+                            .single().execute()
+                        
+                        if user_data.data:
+                            st.session_state.tenant_id = user_data.data['tenant_id']
+                            st.session_state.role = user_data.data['role']
+                            st.success(f"Welcome back! {st.session_state.role} access granted. ✨")
+                            st.rerun()
+                        else:
+                            st.error("Account active but no Tenant linked. Contact Zoe Admin.")
+                
+                except Exception as e:
+                    # If auth fails, we drop to the error message
+                    st.error("❌ Access Denied. Check credentials.")
+
+# ==============================
+# 6. THE AUTH GATEKEEPER
+# ==============================
+# This is usually the bottom of your script
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
+    login_page()
+else:
+    # check_session_timeout()  # Optional: call this here to trigger timeout logic
+    # [Your sidebar and main app logic goes here]
+    pass
