@@ -7,4 +7,3 @@ bcrypt
 twilio
 fpdf2
 streamlit-calendar
-xhtml2pdf
