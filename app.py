@@ -511,29 +511,23 @@ def signup_page(supabase):
 
     with col:
         st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
-
         company = st.text_input("🏢 Company Code", key="signup_company").strip().upper()
         email = st.text_input("📧 Email", key="signup_email").strip().lower()
         password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
-        st.markdown('<div class="center-btn">', unsafe_allow_html=True)
-        signup_clicked = st.button("🚀 Create Account")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        if signup_clicked:
+        if st.button("🚀 Create Account", use_container_width=True):
             if not all([company, email, password]):
                 st.warning("⚠️ Please fill all fields.")
             else:
                 try:
-                    # 1. First, check if the company exists
-                    # (This prevents the 'relation does not exist' or foreign key crash)
+                    # 1. Check if the company exists in the new table
                     check_comp = supabase.table("companies").select("*").eq("company_code", company).execute()
                     
                     if not check_comp.data:
-                        # 2. Create company on the fly so the user can join it
+                        # 2. Create it automatically if it's a new client
                         supabase.table("companies").insert({"company_code": company, "company_name": company}).execute()
                     
-                    # 3. Perform the signup
+                    # 3. Perform the actual signup
                     res = supabase.auth.sign_up({
                         "email": email,
                         "password": password,
@@ -541,28 +535,17 @@ def signup_page(supabase):
                     })
                     
                     if res.user and not res.user.identities:
-                        st.warning("✨ This email is already registered. Please log in instead!")
+                        st.warning("✨ This email is already registered. Please log in!")
                     else:
                         st.success("✅ Welcome to Zoe Consults! Account created.")
 
                 except Exception as e:
-                    error_msg = str(e).lower()
-                    if "already registered" in error_msg:
-                        st.warning("📧 Email already in use.")
-                    else:
-                        st.error(f"❌ Signup failed: {str(e)}")
+                    st.error(f"❌ Signup failed: {str(e)}")
 
-        # Don't forget your 'Back to Login' button here for a clean UI!
         if st.button("⬅️ Back to Login", key="signup_back"):
             st.session_state.view = "login"
             st.rerun()
-        
-        # Inside signup_page(supabase)
-st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
-if st.button("⬅️ Back to Login", key="signup_back_btn"):
-    st.session_state.view = "login"  # Updates the state
-    st.rerun()                      # Forces Streamlit to switch immediately
-st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
