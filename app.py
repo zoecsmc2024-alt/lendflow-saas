@@ -250,8 +250,8 @@ def check_session_timeout():
 # ==============================
 # 5. THE LOGIN INTERFACE (SUPABASE POWERED)
 # ==============================
-def main():
-    # Initialize page with a default value
+def login_page():  # 👈 Change 'main()' to 'login_page()'
+    # Initialize local page variable for the login UI
     page = "🔑 Login"
     # Center the login form using columns
     _, col, _ = st.columns([1, 2, 1])
@@ -296,18 +296,45 @@ def main():
 # 6. THE AUTH GATEKEEPER (Main Script Entry)
 # ==============================
 
-# This block ensures that no part of the app is visible unless logged in.
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    login_page()
-    st.stop() # Prevents execution of the rest of the app
+    login_page() # 👈 This will now work because the name matches!
+    st.stop() 
 else:
-    # If we made it here, they ARE logged in via Supabase.
-    # The session_state now contains 'tenant_id' from our login_page logic.
+    # --- THIS IS THE "DASHBOARD" SECTION ---
     check_session_timeout() 
     
-    # Initialize session state for navigation if not set
-    if "page" not in st.session_state:
-        st.session_state.page = "Overview"
+    # 1. Show the Sidebar and get the current page
+    # Make sure you have a function called show_sidebar() defined!
+    current_page = show_sidebar() 
+    
+    # 3. Route to the correct module based on the selection
+    if current_page == "📊 Overview":
+        show_overview()
+    elif current_page == "💵 Loans":
+        show_loans()
+    elif current_page == "👥 Borrowers":
+        show_borrowers()
+    elif current_page == "🛡️ Collateral":
+        show_collateral()
+    elif current_page == "📅 Calendar":
+        show_calendar()
+    elif current_page == "📄 Ledger":
+        show_ledger()
+    elif current_page == "🚨 Overdue Tracker":
+        show_overdue_tracker()
+    elif current_page == "💰 Payments":
+        show_payments()
+    elif current_page == "📁 Expenses":
+        show_expenses()
+    elif current_page == "📉 PettyCash":
+        show_petty_cash()
+    elif current_page == "🧾 Payroll":
+        show_payroll()
+    elif current_page == "📈 Reports":
+        show_reports()
+    elif current_page == "⚙️ Settings":
+        show_settings()
+
 
 # ==============================
 # 7. DOCUMENT GENERATION (PDF)
