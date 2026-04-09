@@ -486,20 +486,22 @@ def login_page(supabase):
                 st.success(f"Welcome to {auth_result['company']}")
                 st.rerun()
         
-        # --- NEW SECTION: Missing Toggle & Reset Buttons ---
-        st.markdown("---") # Visual line
+        # --- NEW SECTION: Small Toggle & Reset Buttons ---
+        st.markdown("---") 
         
-        col1, col2 = st.columns(2)
+        # We use empty columns on the sides to center the small buttons
+        # The [1, 1, 1, 1] creates 4 small equal slots
+        _, btn_col1, btn_col2, _ = st.columns([1, 2, 2, 1])
         
-        with col1:
-            if st.button("❓ Forgot Password", use_container_width=True):
-                # Trigger reset UI
+        with btn_col1:
+            # Removed use_container_width=True to make it small
+            if st.button("❓ Forgot", key="btn_forgot"):
                 st.session_state.show_reset = True
                 st.rerun()
 
-        with col2:
-            if st.button("🆕 Sign Up", use_container_width=True):
-                # This changes the view to the signup_page
+        with btn_col2:
+            # Shortened text also helps keep the button compact
+            if st.button("🆕 Sign Up", key="btn_signup"):
                 st.session_state.auth_mode = "Sign Up"
                 st.rerun()
 
