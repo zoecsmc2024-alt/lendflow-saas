@@ -549,28 +549,26 @@ def signup_page(supabase):
     })
 
     # 3. CREATE PUBLIC PROFILE
-    # This is where your error likely was. We must use the ID from 'res.user'
+    # ... (inside your signup_page function)
     if res.user:
-        user_profile = {
-            "id": res.user.id, # The UUID from Supabase Auth
-            "tenant_id": tenant_id, # The UUID from our Tenants table
-            "role": "Admin",
-            "full_name": email.split('@')[0].capitalize()
-        }
-        
-        # Insert into the public.users table
-        profile_response = supabase.table("users").insert(user_profile).execute()
-        
-        if profile_response.data:
-            st.success("✅ Account created! Please check your email for a confirmation link.")
-        else:
-            st.error("Auth created, but profile failed. Check database RLS.")
+        try:
+            user_profile = {
+                "id": res.user.id,
+                "tenant_id": tenant_id,
+                "role": "Admin",
+                "full_name": email.split('@')[0].capitalize()
+            }
+            
+            # THE LOGGING ADDITION:
+            profile_response = supabase.table("users").insert(user_profile).execute()
+            st.success("✅ Account created! Please check your email.")
+            
+        except Exception as profile_err:
+            # This will print the EXACT database complaint to your terminal
+            print(f"DEBUG ERROR: {profile_err}")
+            st.error(f"Profile Sync Error: {profile_err}")
     else:
-        st.error("Signup failed. Email might be taken or password too weak.")
-
-except Exception as e:
-    # This will now tell you exactly which table or column failed
-    st.error(f"🚨 Database Error: {str(e)}")
+        st.error("Signup failed at the Auth stage.")
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
