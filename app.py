@@ -518,57 +518,59 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-    # 1. GET OR CREATE TENANT
-    # We check if company exists; if not, we create it.
-    check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
-    
-    if check.data and len(check.data) > 0:
-        tenant_id = check.data[0]['id']
-    else:
-        # Create new tenant and get the ID back
-        new_tenant = supabase.table("tenants").insert({
-            "company_code": tenant_code, 
-            "name": tenant_code.capitalize() 
-        }).execute()
-        if not new_tenant.data:
-            st.error("Failed to create Company record.")
-            st.stop()
-        tenant_id = new_tenant.data[0]['id']
+                # 1. GET OR CREATE TENANT
+                check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
+                
+                if check.data and len(check.data) > 0:
+                    tenant_id = check.data[0]['id']
+                else:
+                    new_tenant = supabase.table("tenants").insert({
+                        "company_code": tenant_code, 
+                        "name": tenant_code.capitalize() 
+                    }).execute()
+                    
+                    if not new_tenant.data:
+                        st.error("Failed to create Company record.")
+                        st.stop()
+                    tenant_id = new_tenant.data[0]['id']
 
-    # 2. SIGN UP IN SUPABASE AUTH
-    # This creates the user in the internal 'auth.users' table
-    res = supabase.auth.sign_up({
-        "email": email,
-        "password": password,
-        "options": {
-            "data": {
-                "tenant_id": str(tenant_id),
-                "role": "Admin"
-            }
-        }
-    })
+                # 2. SIGN UP IN SUPABASE AUTH
+                res = supabase.auth.sign_up({
+                    "email": email,
+                    "password": password,
+                    "options": {
+                        "data": {
+                            "tenant_id": str(tenant_id),
+                            "role": "Admin"
+                        }
+                    }
+                })
 
-    # 3. CREATE PUBLIC PROFILE
-    # ... (inside your signup_page function)
-    if res.user:
-        try:
-            user_profile = {
-                "id": res.user.id,
-                "tenant_id": tenant_id,
-                "role": "Admin",
-                "full_name": email.split('@')[0].capitalize()
-            }
-            
-            # THE LOGGING ADDITION:
-            profile_response = supabase.table("users").insert(user_profile).execute()
-            st.success("✅ Account created! Please check your email.")
-            
-        except Exception as profile_err:
-            # This will print the EXACT database complaint to your terminal
-            print(f"DEBUG ERROR: {profile_err}")
-            st.error(f"Profile Sync Error: {profile_err}")
-    else:
-        st.error("Signup failed at the Auth stage.")
+                # 3. CREATE PUBLIC PROFILE
+                if res.user:
+                    try:
+                        user_profile = {
+                            "id": res.user.id,
+                            "tenant_id": tenant_id,
+                            "role": "Admin",
+                            "full_name": email.split('@')[0].capitalize()
+                        }
+                        
+                        profile_response = supabase.table("users").insert(user_profile).execute()
+                        st.success("✅ Account created! Please check your email.")
+                        
+                    except Exception as profile_err:
+                        print(f"DEBUG ERROR: {profile_err}")
+                        st.error(f"Profile Sync Error: {profile_err}")
+                else:
+                    st.error("Signup failed at the Auth stage. Check if email is already taken.")
+
+            except Exception as e:
+                st.error(f"🚨 Database Error: {str(e)}")
+
+    if st.button("⬅️ Back to Login", key="back_nav"):
+        st.session_state.view = "login"
+        st.rerun()
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
