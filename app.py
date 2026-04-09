@@ -462,11 +462,9 @@ def login_page(supabase):
     with col:
         st.markdown("<h2 style='text-align:center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
 
-        company = st.text_input("🏢 Company Code").strip().lower()
+        company = st.text_input("🏢 Company Code").strip().upper()
         email = st.text_input("📧 Email").strip().lower()
         password = st.text_input("🔑 Password", type="password")
-        
-        # Missing Feature: Remember Me
         remember = st.checkbox("Remember me")
 
         if st.button("🚀 Login", use_container_width=True):
@@ -488,22 +486,25 @@ def login_page(supabase):
         
         # --- NEW SECTION: Small Toggle & Reset Buttons ---
         st.markdown("---") 
-        
-        # We use empty columns on the sides to center the small buttons
-        # The [1, 1, 1, 1] creates 4 small equal slots
-        _, btn_col1, btn_col2, _ = st.columns([1, 2, 2, 1])
-        
+
+        # --- THE FIX: Centered Small Buttons ---
+        # We use a container to apply centering style
+        btn_col1, btn_col2 = st.columns(2)
+
         with btn_col1:
-            # Removed use_container_width=True to make it small
+            # This creates a centered "pocket" for the button
+            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
             if st.button("❓ Forgot", key="btn_forgot"):
                 st.session_state.show_reset = True
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
         with btn_col2:
-            # Shortened text also helps keep the button compact
+            st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
             if st.button("🆕 Sign Up", key="btn_signup"):
                 st.session_state.auth_mode = "Sign Up"
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # Handle the Password Reset View
     if st.session_state.get("show_reset"):
