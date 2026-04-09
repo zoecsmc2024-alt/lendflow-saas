@@ -477,7 +477,7 @@ def login_page(supabase):
         password = st.text_input("🔑 Password", type="password", key="login_pass")
 
         if st.button("🚀 Login", use_container_width=True, key="login_btn"):
-            auth_result = authenticate(supabase, company, email, password)
+            auth_result = authenticate(supabase, tenant, email, password)
             if "error" in auth_result:
                 st.error(auth_result["error"])
             else:
@@ -509,30 +509,30 @@ def login_page(supabase):
 def signup_page(supabase):
     st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
     
-    company = st.text_input("🏢 Company Code", key="signup_company").strip().upper()
+    tenant = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
     email = st.text_input("📧 Email", key="signup_email").strip().lower()
     password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
     if st.button("🚀 Create Account", use_container_width=True):
-        if not all([company, email, password]):
+        if not all([tenant, email, password]):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
                 # 1. Check if the company already exists
-                check = supabase.table("companies").select("*").eq("company_code", company).execute()
+                check_comp = supabase.table("tenants").select("*").eq("company_code", tenant).execute()
                 
                 if not check.data:
                     # 2. If it's a new client, create the company record first
-                    supabase.table("companies").insert({
-                        "company_code": company, 
-                        "company_name": company.capitalize()
+                    supabase.table("tenants").insert({
+                        "company_code": tenant, 
+                        "tenant_name": tenant.capitalize()
                     }).execute()
                 
                 # 3. Now sign up the user—the database will now accept the link!
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
-                    "options": {"data": {"company_code": company, "role": "admin"}}
+                    "options": {"data": {"company_code": tenant, "role": "admin"}}
                 })
                 
                 if res.user:
