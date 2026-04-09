@@ -790,41 +790,7 @@ def show_sidebar():
     return selection
 
 
-# ==========================================
-# 9. APP ROUTING (POST-LOGIN)
-# ==========================================
-# 1. Show the Sidebar and get the current page
-# Make sure you have a function called show_sidebar() defined!
-current_page = show_sidebar() 
 
-# 3. Route to the correct module based on the selection
-if current_page == "📊 Overview":
-    show_overview()
-elif current_page == "💵 Loans":
-    show_loans()
-elif current_page == "👥 Borrowers":
-    show_borrowers()
-elif current_page == "🛡️ Collateral":
-    show_collateral()
-elif current_page == "📅 Calendar":
-    show_calendar()
-elif current_page == "📄 Ledger":
-    show_ledger()
-elif current_page == "🚨 Overdue Tracker":
-    show_overdue_tracker()
-elif current_page == "💰 Payments":
-    show_payments()
-elif current_page == "📁 Expenses":
-    show_expenses()
-elif current_page == "📉 PettyCash":
-    show_petty_cash()
-elif current_page == "🧾 Payroll":
-    show_payroll()
-elif current_page == "📈 Reports":
-    show_reports()
-elif current_page == "⚙️ Settings":
-    show_settings()
-# ==============================
 # 11. DASHBOARD LOGIC (OVERVIEW)
 # ==============================
 def show_dashboard():
