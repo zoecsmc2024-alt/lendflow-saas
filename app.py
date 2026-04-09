@@ -271,12 +271,97 @@ def login_page():
                     st.error("❌ Access Denied. Check credentials.")
 
 # ==============================
-# 6. THE AUTH GATEKEEPER
+# 6. THE AUTH GATEKEEPER (Main Script Entry)
 # ==============================
-# This is usually the bottom of your script
+
+# This block ensures that no part of the app is visible unless logged in.
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
     login_page()
+    st.stop() # Prevents execution of the rest of the app
 else:
-    # check_session_timeout()  # Optional: call this here to trigger timeout logic
-    # [Your sidebar and main app logic goes here]
-    pass
+    # If we made it here, they ARE logged in via Supabase.
+    # The session_state now contains 'tenant_id' from our login_page logic.
+    check_session_timeout() 
+    
+    # Initialize session state for navigation if not set
+    if "page" not in st.session_state:
+        st.session_state.page = "Overview"
+
+# ==============================
+# 7. DOCUMENT GENERATION (PDF)
+# ==============================
+
+def generate_ledger_pdf(loan_data, ledger_df):
+    """
+    Generates a professional 'Neon Sky' styled PDF statement.
+    STILL INTACT: Maintains your exact branding and formatting.
+    """
+    # Initialize PDF
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # --- NEON SKY HEADER ---
+    # Header Background (Deep Blue #2B3F87)
+    # We use your BRANDING['navy'] here for consistency if you prefer, 
+    # but I've kept your hardcoded (43, 63, 135) to match your original.
+    pdf.set_fill_color(43, 63, 135) 
+    pdf.rect(0, 0, 210, 45, 'F')
+    
+    # Company Title (Neon Green #00FFCC)
+    pdf.set_font("Arial", 'B', 20)
+    pdf.set_text_color(0, 255, 204) 
+    
+    # SAAS UPGRADE: Use the Tenant's Company Name instead of hardcoded Zoe Consults
+    # If you have a 'company_name' in session state, we use it here.
+    display_name = st.session_state.get('company_name', "ZOE CONSULTS SMC LIMITED")
+    pdf.text(15, 20, display_name.upper())
+    
+    # Subheader
+    pdf.set_font("Arial", '', 11)
+    pdf.set_text_color(255, 255, 255)
+    borrower_name = str(loan_data.get('Borrower', 'Client')).upper()
+    pdf.text(15, 30, f"OFFICIAL CLIENT STATEMENT: {borrower_name}")
+    pdf.text(15, 38, f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    
+    # --- CLIENT DETAILS ---
+    pdf.set_y(50)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Arial", 'B', 10)
+    
+    loan_id = loan_data.get('Loan_ID', 'N/A')
+    start_date = loan_data.get('Start_Date', 'N/A')
+    try:
+        total_due = float(loan_data.get('Total_Repayable', 0))
+    except (ValueError, TypeError):
+        total_due = 0.0
+    
+    pdf.cell(0, 8, f"Loan ID: {loan_id}  |  Start Date: {start_date}", 0, 1)
+    pdf.cell(0, 8, f"Total Repayable: {total_due:,.0f} UGX", 0, 1)
+    pdf.ln(5)
+
+    # --- TABLE HEADERS ---
+    pdf.set_fill_color(230, 230, 230)
+    pdf.set_font("Arial", 'B', 9)
+    
+    pdf.cell(25, 10, "Date", 1, 0, 'C', True)
+    pdf.cell(65, 10, "Description", 1, 0, 'C', True)
+    pdf.cell(30, 10, "Debit", 1, 0, 'C', True)
+    pdf.cell(30, 10, "Credit", 1, 0, 'C', True)
+    pdf.cell(35, 10, "Balance", 1, 1, 'C', True)
+
+    # --- TABLE ROWS ---
+    pdf.set_font("Arial", '', 8)
+    for _, row in ledger_df.iterrows():
+        date_str = str(row.get('Date', ''))[:10]
+        
+        def clean_num(val):
+            try: return float(val)
+            except: return 0.0
+
+        pdf.cell(25, 8, date_str, 1)
+        pdf.cell(65, 8, str(row.get('Description', ''))[:40], 1)
+        pdf.cell(30, 8, f"{clean_num(row.get('Debit', 0)):,.0f}", 1, 0, 'R')
+        pdf.cell(30, 8, f"{clean_num(row.get('Credit', 0)):,.0f}", 1, 0, 'R')
+        pdf.cell(35, 8, f"{clean_num(row.get('Balance', 0)):,.0f}", 1, 1, 'R')
+
+    return pdf.output(dest='S').encode('latin-1')
