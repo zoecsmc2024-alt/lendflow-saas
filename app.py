@@ -1990,3 +1990,114 @@ def show_reports():
         if risk_percent < 10: st.success("✅ Healthy Portfolio")
         elif risk_percent < 25: st.warning("⚠️ Moderate Risk")
         else: st.error("🆘 Critical Risk Level")
+
+
+# ==============================
+# 22. MASTER LEDGER & STATEMENTS
+# ==============================
+
+def show_ledger():
+    """
+    Detailed transaction audit for individual loans.
+    Generates a consolidated HTML statement with automated running balances.
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>📘 Master Ledger</h2>", unsafe_allow_html=True)
+    
+    # 1. LOAD DATA (Automatically filtered by Tenant)
+    loans_df = get_cached_data("loans")
+    payments_df = get_cached_data("payments")
+
+    if loans_df.empty:
+        st.info("💡 Your system is clear! No active loans found.")
+        return
+
+    # 2. SELECTION LOGIC
+    loan_options = [f"ID: {r['id']} - {r['borrower']}" for _, r in loans_df.iterrows()]
+    selected_loan = st.selectbox("Select Loan to View Full Statement", loan_options, key="ledger_main_select")
+    
+    # Extract ID safely
+    raw_id = int(selected_loan.split(" - ")[0].replace("ID: ", ""))
+    loan_info = loans_df[loans_df["id"] == raw_id].iloc[0]
+    
+    # 3. TREND MATH (Preserved Exactly)
+    current_p = float(loan_info.get("principal", 0))
+    interest_amt = float(loan_info.get("interest", 0))
+    
+    # Top Card Display
+    display_bal = float(loan_info.get("balance", (current_p + interest_amt) - float(loan_info.get("amount_paid", 0))))
+
+    st.markdown(f"""
+        <div style="background-color: #ffffff; padding: 25px; border-radius: 15px; border-left: 5px solid #2B3F87; box-shadow: 2px 2px 10px rgba(0,0,0,0.05); margin-bottom: 20px;">
+            <p style="margin:0; font-size:14px; color:#666; font-weight:bold;">CURRENT OUTSTANDING BALANCE (INC. INTEREST)</p>
+            <h1 style="margin:0; color:#2B3F87;">{display_bal:,.0f} <span style="font-size:18px;">UGX</span></h1>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 4. BUILD THE LEDGER TABLE DATA (Preserved Logic)
+    ledger_data = []
+    status_str = str(loan_info.get('status', ''))
+    
+    # Opening Entries
+    ledger_data.append({"Date": loan_info.get("start_date", "-"), "Description": "Initial Loan Disbursement", "Debit": current_p, "Credit": 0, "Balance": current_p})
+    if interest_amt > 0:
+        ledger_data.append({"Date": loan_info.get("start_date", "-"), "Description": "➕ Interest Charged", "Debit": interest_amt, "Credit": 0, "Balance": current_p + interest_amt})
+
+    # Integrate Payments
+    if not payments_df.empty:
+        rel_pay = payments_df[payments_df["loan_id"] == raw_id].sort_values("date")
+        curr_run_bal = current_p + interest_amt
+        for _, pay in rel_pay.iterrows():
+            p_amt = float(pay.get("amount", 0))
+            curr_run_bal -= p_amt
+            ledger_data.append({
+                "Date": pay.get("date", "-"),
+                "Description": f"✅ Repayment ({pay.get('method', 'Cash')})",
+                "Debit": 0, "Credit": p_amt, "Balance": curr_run_bal
+            })
+
+    st.dataframe(pd.DataFrame(ledger_data).style.format({"Debit": "{:,.0f}", "Credit": "{:,.0f}", "Balance": "{:,.0f}"}), use_container_width=True, hide_index=True)
+
+    # 5. PRINTABLE STATEMENT (SaaS Branded)
+    st.markdown("---")
+    if st.button("✨ Preview Consolidated Statement", use_container_width=True):
+        borrowers_df = get_cached_data("borrowers")
+        current_b_name = loan_info['borrower'] 
+        client_loans = loans_df[loans_df["borrower"] == current_b_name]
+        b_data = borrowers_df[borrowers_df["name"] == current_b_name]
+        b_details = b_data.iloc[0] if not b_data.empty else {}
+
+        navy_blue, baby_blue = "#000080", "#E1F5FE"
+        
+        html_statement = f"""
+        <div id="printable-area" style="font-family: Arial; padding: 25px; border: 1px solid #eee; background: white; color: #333;">
+            <div style="background: {navy_blue}; color: white; padding: 30px; border-radius: 8px; display: flex; justify-content: space-between;">
+                <div><h1>{st.session_state.get('company_name', 'ZOE CONSULTS').upper()}</h1><p>Client Statement</p></div>
+                <div style="text-align: right;"><p><b>{current_b_name}</b></p><p>{datetime.now().strftime('%d %b %Y')}</p></div>
+            </div>
+            <div style="padding: 15px; border: 1px solid #ddd; border-top: none;">
+                <p><b>Phone:</b> {b_details.get('phone', 'N/A')} | <b>Address:</b> {b_details.get('address', 'N/A')}</p>
+            </div>
+        """
+
+        grand_total = 0.0
+        for _, l_row in client_loans.iterrows():
+            l_id = l_row['id']
+            p, i = float(l_row['principal']), float(l_row['interest'])
+            l_pay = payments_df[payments_df["loan_id"] == l_id]["amount"].sum() if not payments_df.empty else 0
+            l_bal = (p + i) - l_pay
+            grand_total += l_bal
+
+            html_statement += f"""
+            <div style="margin-top: 20px; padding: 10px; background: {baby_blue}; font-weight: bold; color: {navy_blue};">
+                LOAN ID: {l_id} | Balance: {l_bal:,.0f} UGX
+            </div>
+            """
+        
+        html_statement += f"""
+            <div style="margin-top: 30px; padding: 20px; border: 2px solid {navy_blue}; text-align: right; background: #f0f4ff;">
+                <h2 style="color: {navy_blue}; margin: 0;">GRAND TOTAL OUTSTANDING</h2>
+                <h1 style="color: #FF4B4B; margin: 0;">{grand_total:,.0f} UGX</h1>
+            </div>
+        </div>"""
+        
+        st.components.v1.html(html_statement, height=600, scrolling=True)
