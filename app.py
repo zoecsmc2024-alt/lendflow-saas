@@ -695,4 +695,148 @@ def show_overview():
             m_cash.columns = ["Month", "Income", "Expenses"]
             fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
-            st.plotly_chart(fig_bar, use_container_width=True)       
+            st.plotly_chart(fig_bar, use_container_width=True) 
+
+
+# ==============================
+# 12. BORROWERS MANAGEMENT PAGE
+# ==============================
+
+def show_borrowers():
+    """
+    Manages borrower profiles. 
+    Transformed for Supabase Multi-tenancy.
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>👥 Borrowers Management</h2>", unsafe_allow_html=True)
+    
+    # 1. FETCH TENANT DATA
+    # Automatically filtered by tenant_id via our get_cached_data helper
+    df = get_cached_data("borrowers")
+    
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "name", "phone", "address", "national_id", "status"])
+
+    # --- TABS (Logic & Styling Preserved) ---
+    tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
+
+    # --- TAB 1: VIEW ALL ---
+    with tab_view:
+        col1, col2 = st.columns([3, 1]) 
+        with col1:
+            search = st.text_input("🔍 Search Name or Phone", placeholder="Type to filter...", key="bor_search").lower()
+        with col2:
+            status_filter = st.selectbox("Filter Status", ["All", "Active", "Inactive"], key="bor_status_filt")
+
+        filtered_df = df.copy()
+        if not filtered_df.empty:
+            # Ensure columns exist and match Supabase naming (lowercase)
+            filtered_df["name"] = filtered_df["name"].astype(str)
+            filtered_df["phone"] = filtered_df["phone"].astype(str)
+            
+            mask = (filtered_df["name"].str.lower().str.contains(search, na=False) | 
+                    filtered_df["phone"].str.contains(search, na=False))
+            filtered_df = filtered_df[mask]
+            
+            if status_filter != "All":
+                filtered_df = filtered_df[filtered_df["status"] == status_filter]
+
+            if not filtered_df.empty:
+                rows_html = ""
+                for i, r in filtered_df.reset_index().iterrows():
+                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                    rows_html += f"""
+                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
+                        <td style="padding:12px;"><b>{r['name']}</b></td>
+                        <td style="padding:12px;">{r['phone']}</td>
+                        <td style="padding:12px; font-size: 11px; color:#666;">{r.get('national_id', 'N/A')}</td>
+                        <td style="padding:12px; text-align:center;">
+                            <span style="background:#4A90E2; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
+                        </td>
+                    </tr>"""
+                st.markdown(f"<div style='border:2px solid #4A90E2; border-radius:10px; overflow:hidden; margin-top:20px;'><table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'><thead><tr style='background:#4A90E2; color:white; text-align:left;'><th style='padding:12px;'>Borrower Name</th><th style='padding:12px;'>Phone</th><th style='padding:12px;'>National ID</th><th style='padding:12px; text-align:center;'>Status</th></tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
+
+    # --- TAB 2: ADD BORROWER ---
+    with tab_add:
+        with st.form("add_borrower_form", clear_on_submit=True):
+            st.markdown("<h4 style='color: #4A90E2;'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            name = c1.text_input("Full Name*")
+            phone = c2.text_input("Phone Number*")
+            nid = c1.text_input("National ID / NIN")
+            addr = c2.text_input("Physical Address")
+            
+            if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
+                if name and phone:
+                    # In Supabase, we don't need to manually calculate new_id (it's auto-increment)
+                    new_entry = pd.DataFrame([{
+                        "name": name, 
+                        "phone": phone, 
+                        "national_id": nid, 
+                        "address": addr, 
+                        "status": "Active",
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    if save_data("borrowers", new_entry):
+                        st.success(f"✅ {name} registered!"); st.rerun()
+
+    # --- TAB 3: AUDIT & MANAGE ---
+    with tab_audit:
+        if not df.empty:
+            target_name = st.selectbox("Select Borrower to Audit/Manage", df["name"].tolist(), key="audit_manage_select")
+            b_data = df[df["name"] == target_name].iloc[0]
+            
+            # SHOW LOAN HISTORY
+            u_loans = get_cached_data("loans")
+            
+            if not u_loans.empty:
+                # Filter for this specific borrower within the tenant's loans
+                user_loans = u_loans[u_loans["borrower"] == target_name].copy()
+                if not user_loans.empty:
+                    st.metric("Total Loans Found", len(user_loans))
+                    st.table(user_loans[["id", "status", "principal", "end_date"]])
+                else:
+                    st.info("ℹ️ No loans recorded for this borrower yet.")
+
+            st.markdown("---")
+            st.markdown("### ⚙️ Modify Borrower Details")
+            
+            with st.expander(f"📝 Edit Profile: {target_name}"):
+                with st.form(f"edit_bor_{target_name}"):
+                    c1, c2 = st.columns(2)
+                    e_name = c1.text_input("Full Name", value=str(b_data['name']))
+                    e_phone = c1.text_input("Phone Number", value=str(b_data['phone']))
+                    e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
+                    e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
+                    e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if b_data['status'] == "Active" else 1)
+                    e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
+                    
+                    if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
+                        # Create a single-row dataframe for the update
+                        update_df = pd.DataFrame([{
+                            "id": b_data['id'], # Primary key for upsert
+                            "name": e_name,
+                            "phone": e_phone,
+                            "national_id": e_nid,
+                            "email": e_email,
+                            "status": e_status,
+                            "address": e_addr,
+                            "tenant_id": st.session_state.tenant_id
+                        }])
+                        
+                        if save_data("borrowers", update_df):
+                            st.success("✅ Profile updated!"); st.rerun()
+
+            # --- DELETE ACTION ---
+            st.markdown("### ⚠️ Danger Zone")
+            if st.button(f"🗑️ Delete {target_name} Permanently", key=f"del_btn_{target_name}"):
+                # Check for active loans before deleting
+                has_loans = not u_loans[u_loans["borrower"] == target_name].empty if not u_loans.empty else False
+
+                if has_loans:
+                    st.error("❌ Cannot delete! Borrower has active loan records.")
+                else:
+                    try:
+                        supabase.table("borrowers").delete().eq("id", b_data['id']).execute()
+                        st.warning(f"⚠️ {target_name} removed."); st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
