@@ -2479,17 +2479,27 @@ def show_settings():
 
 
 # ==========================================
-# 7. MAIN APP EXECUTION
+# 7. UNIFIED APP ROUTER
 # ==========================================
 
-# 1. Check if user is logged in
+# 1. Initialize view state if not present
+if "view" not in st.session_state:
+    st.session_state.view = "login"
+
+# 2. Check Login Status
 if not st.session_state.get("logged_in", False):
-    # If not logged in, show the Member Access screen
-    login_page(supabase)
+    # ONLY one of these screens can be active at a time
+    if st.session_state.view == "login":
+        login_page(supabase)
+    elif st.session_state.view == "signup":
+        signup_page(supabase)
+    elif st.session_state.view == "reset":
+        reset_password_ui(supabase)
+        if st.button("⬅️ Back to Login"):
+            st.session_state.view = "login"
+            st.rerun()
 else:
-    # If logged in, show the Dashboard Navigation
-    
-    # Define your menu again (or import it)
+    # --- DASHBOARD NAVIGATION (Only shows if logged_in is True) ---
     menu = {
         "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
         "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
@@ -2497,7 +2507,6 @@ else:
         "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
     }
     
-    # 2. Setup Sidebar
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
     
     with st.sidebar:
@@ -2506,38 +2515,15 @@ else:
         
         st.divider()
         if st.button("🚪 Logout", use_container_width=True):
-            logout()
+            logout() # Ensure your logout function sets logged_in to False
             st.rerun()
 
-    # 3. Routing Logic
+    # --- PAGE ROUTING ---
     if "Overview" in current_page:
         show_overview()
     elif "Payroll" in current_page:
-        # Example of applying the RBAC you organized
         require_role(["admin", "manager"])
         show_payroll()
     elif "Settings" in current_page:
         require_role(["admin"])
         show_settings()
-    # ... add other elif statements for your functions here
-
-# Initialize session state for the router
-if "view" not in st.session_state:
-    st.session_state.view = "login"
-
-# --- MAIN APP ROUTER ---
-if not st.session_state.get("logged_in"):
-    if st.session_state.view == "login":
-        login_page(supabase)
-    elif st.session_state.view == "signup":
-        signup_page(supabase)
-    elif st.session_state.view == "reset":
-        # Isolated reset view prevents duplicate ID errors
-        reset_password_ui(supabase)
-        if st.button("⬅️ Back to Login"):
-            st.session_state.view = "login"
-            st.rerun()
-else:
-    # Success! Show the dashboard
-    st.success(f"Logged in to {st.session_state.get('company')}")
-    # dashboard_page()
