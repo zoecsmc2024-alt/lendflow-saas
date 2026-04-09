@@ -526,20 +526,30 @@ def signup_page(supabase):
                 st.warning("Fill all fields")
             else:
                 try:
+                    # Everything inside 'try' must be indented 4 spaces
                     res = supabase.auth.sign_up({
                         "email": email,
                         "password": password,
                         "options": {
                             "data": {
                                 "company_code": company,
-                                "role": "Admin"  # first user becomes Admin
+                                "role": "Admin" 
                             }
                         }
                     })
-                    st.success("Account created! You can now log in.")
-                    st.info("If email confirmation is ON, check your inbox.")
+                    
+                    # This check stops the "Database error" if the email is already taken
+                    if res.user and not res.user.identities:
+                        st.warning("✨ This email is already registered. Please log in instead!")
+                    else:
+                        st.success("✅ Account created! Please check your email for a confirmation link.")
+
                 except Exception as e:
-                    st.error(f"Signup failed: {str(e)}")
+                    # Everything inside 'except' must also be indented
+                    if "already registered" in str(e).lower():
+                        st.warning("📧 Email already in use.")
+                    else:
+                        st.error(f"❌ Signup failed: {str(e)}")
         
         # Inside signup_page(supabase)
 st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
