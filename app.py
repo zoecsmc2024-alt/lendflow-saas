@@ -1506,3 +1506,120 @@ def show_calendar():
             late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
             od_rows += f"""<tr style="background:#FFF5F5;"><td style="padding:10px;"><b>#{r['id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px;color:{late_color};font-weight:bold;">{r['days_late']} Days</td><td style="padding:10px;text-align:center;"><span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r['status']}</span></td></tr>"""
         st.markdown(f"""<div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#FF4B4B;color:white;"><th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:center;">Late By</th><th style="padding:10px;text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+
+# ==============================
+# 18. EXPENSE MANAGEMENT PAGE
+# ==============================
+
+def show_expenses():
+    """
+    Tracks business operational costs for specific tenants.
+    Includes category logging, distribution analytics, and row management.
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
+
+    # 1. FETCH TENANT DATA
+    df = get_cached_data("expenses")
+
+    # The Master Category List (Intact)
+    EXPENSE_CATS = ["Rent", "Insurance Account", "Utilities", "Salaries", "Marketing", "Office Expenses"]
+
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "category", "amount", "date", "description", "payment_date", "receipt_no"])
+
+    # ==============================
+    # TABBED INTERFACE
+    # ==============================
+    tab_add, tab_view, tab_manage = st.tabs(["➕ Record Expense", "📊 Spending Analysis", "⚙️ Manage/Delete"])
+
+    # --- TAB 1: ADD NEW EXPENSE ---
+    with tab_add:
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.form("add_expense_form", clear_on_submit=True):
+            st.markdown("<h4 style='color: #2B3F87;'>📝 Log Business Outflow</h4>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            
+            category = col1.selectbox("Category", EXPENSE_CATS)
+            amount = col2.number_input("Amount (UGX)", min_value=0, step=1000)
+            desc = st.text_input("Description (e.g., Office Power Bill March)")
+            
+            c_date, c_receipt = st.columns(2)
+            p_date = c_date.date_input("Actual Payment Date", value=datetime.now())
+            receipt_no = c_receipt.text_input("Receipt / Invoice #", placeholder="e.g. RCP-101")
+            
+            if st.form_submit_button("🚀 Save Expense Record", use_container_width=True):
+                if amount > 0 and desc:
+                    new_entry = pd.DataFrame([{
+                        "category": category,
+                        "amount": float(amount),
+                        "date": datetime.now().strftime("%Y-%m-%d"), 
+                        "description": desc,
+                        "payment_date": p_date.strftime("%Y-%m-%d"), 
+                        "receipt_no": receipt_no,
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    
+                    if save_data("expenses", new_entry):
+                        st.success(f"✅ Expense of {amount:,.0f} recorded!"); st.rerun()
+                else:
+                    st.error("⚠️ Please provide both an amount and a description.")
+
+    # --- TAB 2: ANALYSIS & LOG ---
+    with tab_view:
+        if not df.empty:
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+            total_spent = df["amount"].sum()
+            
+            st.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">TOTAL MONTHLY OUTFLOW</p><h2 style="margin:0;color:#FF4B4B;">{total_spent:,.0f} <span style="font-size:14px;">UGX</span></h2></div>""", unsafe_allow_html=True)
+            
+            # Pie Chart Analysis (Branding Preserved)
+            cat_summary = df.groupby("category")["amount"].sum().reset_index()
+            fig_exp = px.pie(cat_summary, names="category", values="amount", title="Spending Distribution", hole=0.4, color_discrete_sequence=["#2B3F87", "#F0F8FF", "#FF4B4B", "#ADB5BD"])
+            fig_exp.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
+            st.plotly_chart(fig_exp, use_container_width=True)
+            
+            # Detailed Expense Log (Custom HTML Table)
+            rows_html = ""
+            for i, r in df.sort_values("date", ascending=False).reset_index().iterrows():
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                rows_html += f"""<tr style="background-color:{bg};border-bottom:1px solid #ddd;"><td style="padding:10px;color:#666;font-size:11px;">{r['date']}</td><td style="padding:10px;"><b>{r['category']}</b></td><td style="padding:10px;font-size:11px;">{r['description']}</td><td style="padding:10px;text-align:right;font-weight:bold;color:#FF4B4B;">{float(r['amount']):,.0f}</td><td style="padding:10px;text-align:center;color:#666;font-size:10px;">{r['receipt_no']}</td></tr>"""
+
+            st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#2B3F87;color:white;text-align:left;"><th style="padding:12px;">Date</th><th style="padding:12px;">Category</th><th style="padding:12px;">Description</th><th style="padding:12px;text-align:right;">Amount (UGX)</th><th style="padding:12px;text-align:center;">Receipt #</th></tr></thead><tbody>{rows_html}</tbody></table></div>""", unsafe_allow_html=True)
+
+    # --- TAB 3: MANAGE / EDIT EXPENSES (NEW LOGIC) ---
+    with tab_manage:
+        st.markdown("### 🛠️ Manage Outflow Records")
+        if df.empty:
+            st.info("ℹ️ No expenses found to manage.")
+        else:
+            # Selection for Expenses
+            exp_options = [f"ID: {r['id']} | {r['category']} - {float(r['amount']):,.0f} UGX" for _, r in df.iterrows()]
+            selected_exp = st.selectbox("🔍 Select Expense to Edit/Delete", exp_options)
+
+            exp_id = int(selected_exp.split("|")[0].replace("ID:", "").strip())
+            exp_to_edit = df[df["id"] == exp_id].iloc[0]
+
+            with st.form("edit_expense_form"):
+                st.markdown(f"**Editing Record ID #{exp_id}**")
+                c1, c2 = st.columns(2)
+                up_cat = c1.selectbox("Update Category", EXPENSE_CATS, index=EXPENSE_CATS.index(exp_to_edit['category']) if exp_to_edit['category'] in EXPENSE_CATS else 0)
+                up_amt = c1.number_input("Update Amount", value=float(exp_to_edit['amount']))
+                up_desc = c2.text_input("Update Description", value=str(exp_to_edit['description']))
+                up_date = c2.date_input("Update Date", value=pd.to_datetime(exp_to_edit['payment_date']))
+
+                if st.form_submit_button("💾 Save Changes to Database", use_container_width=True):
+                    update_entry = pd.DataFrame([{
+                        "id": exp_id,
+                        "category": up_cat,
+                        "amount": float(up_amt),
+                        "description": up_desc,
+                        "payment_date": up_date.strftime("%Y-%m-%d"),
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    if save_data("expenses", update_entry):
+                        st.success("✅ Expense updated!"); st.rerun()
+
+            if st.button("🗑️ Delete Expense Permanently", use_container_width=True):
+                supabase.table("expenses").delete().eq("id", exp_id).execute()
+                st.warning(f"⚠️ Record #{exp_id} deleted."); st.rerun()
+        
