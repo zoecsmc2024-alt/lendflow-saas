@@ -470,7 +470,7 @@ def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
 
     with col:
-        st.markdown("<h2 style='text-align:center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align:center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
 
         company = st.text_input("🏢 Company Code").strip().upper()
         email = st.text_input("📧 Email").strip().lower()
