@@ -11,7 +11,6 @@ import json
 import os
 import re 
 from datetime import datetime, timedelta
-from twilio.rest import Client as TwilioClient
 from fpdf import FPDF
 from streamlit_calendar import calendar
 
