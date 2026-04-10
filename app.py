@@ -20,30 +20,7 @@ import base64
 from datetime import datetime
 from supabase import create_client
 
-# --- 1. THEME HELPER ---
-def get_current_theme():
-    tenant_id = st.session_state.get("tenant_id")
-    try:
-        res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).execute()
-        if res.data:
-            return res.data[0]
-    except Exception:
-        pass
-    return {'brand_color': '#2B3F87', 'name': 'Zoe Consults'}
 
-# --- 2. LOGO HELPER ---
-def get_logo():
-    try:
-        tenant_id = st.session_state.get("tenant_id")
-        res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
-        if res.data and res.data[0].get("logo_url"):
-            file_path = res.data[0]["logo_url"]
-            file_data = supabase.storage.from_('company-logos').download(file_path)
-            b64 = base64.b64encode(file_data).decode()
-            return f"data:image/png;base64,{b64}"
-    except Exception:
-        return None
-    return None
 
 @st.cache_data(ttl=600)
 def get_cached_data_refined(table_name):
@@ -848,7 +825,30 @@ def save_logo_to_db(image_file):
     except Exception as e:
         st.error(f"❌ Logo Save Error: {e}")
         return False
+# --- 1. THEME HELPER ---
+def get_current_theme():
+    tenant_id = st.session_state.get("tenant_id")
+    try:
+        res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).execute()
+        if res.data:
+            return res.data[0]
+    except Exception:
+        pass
+    return {'brand_color': '#2B3F87', 'name': 'Zoe Consults'}
 
+# --- 2. LOGO HELPER ---
+def get_logo():
+    try:
+        tenant_id = st.session_state.get("tenant_id")
+        res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
+        if res.data and res.data[0].get("logo_url"):
+            file_path = res.data[0]["logo_url"]
+            file_data = supabase.storage.from_('company-logos').download(file_path)
+            b64 = base64.b64encode(file_data).decode()
+            return f"data:image/png;base64,{b64}"
+    except Exception:
+        return None
+    return None
 
 # ==========================================
 # 17. SIDEBAR & NAVIGATION (FULLY SYNCED)
