@@ -927,7 +927,6 @@ def render_sidebar():
     with st.sidebar:
         # --- 1. TENANT SELECTION ---
         if tenant_map:
-            # Find the index of the current tenant to keep the selectbox in sync
             options = list(tenant_map.keys())
             default_index = 0
             if current_tenant_id:
@@ -948,25 +947,28 @@ def render_sidebar():
             st.warning("No tenants available.")
             return
 
-        # --- 2. CENTERED LOGO ---
+        # --- 2. CENTERED LOGO (MATCHING STORAGE PATH) ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
             logo_data = active_company.get('logo_url')
             
             if logo_data:
+                # If it's already a full URL
                 if logo_data.startswith("http"):
                     final_logo_url = logo_data
                 else:
-                    # Replace with your actual project reference ID
+                    # Construct URL: ensure project_ref is correct
                     project_ref = "YOUR_PROJECT_ID" 
+                    # logo_data already contains 'logos/tenant_id_logo.png' from our save logic
                     final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{logo_data}"
                 
                 import time
-                # Cache busting helps see the new logo immediately after a successful upload
+                # Cache busting (?t=) is CRITICAL to replace the broken image icon in the browser
                 st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
             else:
+                # Default globe if no logo_url exists in database
                 st.write("🌍")
-
+        
         # --- 3. CENTERED INFO BOX ---
         user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
@@ -978,9 +980,6 @@ def render_sidebar():
         
         st.write("") 
         st.divider()
-
-        # --- 4. NAVIGATION MENU ---
-        # Add your st.radio logic here for the actual app sections
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
@@ -2495,12 +2494,12 @@ def show_settings():
     if st.button("💾 Save Branding Changes", use_container_width=True):
         updated_data = {"brand_color": new_color}
         
-        # 1. Handle logo upload
+        # Correctly indented inside the button click logic
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                # Clean filename to avoid double extensions like .png.jpeg
                 file_ext = logo_file.name.split('.')[-1]
+                # Clean path: storing in the 'logos' folder
                 clean_path = f"logos/{tenant_id}_logo.{file_ext}"
                 
                 # UPLOAD / UPSERT
@@ -2512,12 +2511,11 @@ def show_settings():
                         "content-type": f"image/{file_ext}"
                     }
                 )
-                
-                # Store only the relative path/filename in the DB for flexibility
+                # Store the relative path for the sidebar to find
                 updated_data["logo_url"] = clean_path
                 
             except Exception as e:
-                # Fallback for update if upload fails on duplicate
+                # Fallback for update if upload fails on specific duplicate errors
                 try:
                     supabase.storage.from_(bucket_name).update(
                         path=clean_path,
@@ -2527,18 +2525,17 @@ def show_settings():
                 except Exception as e2:
                     st.error(f"❌ Storage Error: {str(e2)}")
                     st.stop()
-        
-        # 2. Update Database & Sync Session
+
+        # Update Database & Session State (indented inside the button click)
         try:
             supabase.table("tenants").update(updated_data).eq("id", tenant_id).execute()
             
-            # Sync session state for immediate UI feedback
+            # Instant UI feedback for the sidebar
             st.session_state['theme_color'] = new_color
             if "logo_url" in updated_data:
                 st.session_state['logo_url'] = updated_data["logo_url"]
             
-            st.success("✅ Branding updated successfully!")
-            
+            st.success("✅ Branding updated! Refreshing...")
             import time
             time.sleep(1)
             st.rerun()
