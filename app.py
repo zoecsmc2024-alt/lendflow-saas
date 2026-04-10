@@ -2672,27 +2672,46 @@ def dashboard_main():
         st.info("This module is currently under development.")
 
 # ==========================================
-# 4. MAIN APP ENTRY POINT (THE BRAIN)
+# 12. THE FINAL ROUTER (FIXED)
 # ==========================================
 
 def main():
-    # A. Initialize session state variables
+    # 1. Initialize session state variables safely
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     if "view" not in st.session_state:
         st.session_state.view = "login"
 
-    # B. THE GATEKEEPER
-    if not st.session_state.logged_in:
-        # AUTH WORLD
-        if st.session_state.view == "login":
-            login_page(supabase) # Ensure this is defined in your script!
-        elif st.session_state.view == "signup":
-            signup_page(supabase) # Ensure this is defined in your script!
-    else:
-        # APP WORLD
-        dashboard_main()
+    # 2. Apply your custom UI styles (The navy blue/baby blue theme)
+    apply_custom_styles()
+    apply_ui_theme()
 
-# --- THE EXECUTION ---
+    # 3. ROUTING LOGIC
+    # If not logged in, show the Auth screens based on 'view'
+    if not st.session_state.logged_in:
+        if st.session_state.view == "login":
+            login_page(supabase)
+        elif st.session_state.view == "signup":
+            signup_page(supabase)
+        elif st.session_state.view == "reset":
+            reset_password_ui(supabase)
+            
+    # If logged in, show the Dashboard world
+    else:
+        # This calls your sidebar and shows the overview
+        current_selection = show_sidebar()
+        
+        if "Overview" in current_selection:
+            # We call your dashboard logic here
+            st.markdown(f"### 📍 {current_selection}")
+            show_overview() 
+        else:
+            # For other menu items (Loans, Payroll, etc.)
+            st.title(current_selection)
+            st.info("This module is connected to Supabase and loading...")
+
+# ==========================================
+# 13. EXECUTION (THE TRIGGER)
+# ==========================================
 if __name__ == "__main__":
     main()
