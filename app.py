@@ -873,27 +873,55 @@ def save_logo_to_db(image_file):
         st.error(f"❌ Logo Save Error: {e}")
         return False
 def main():
-    # 1. Initialize session state
+    # 1. Initialize session state variables
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
-    # Initialize view
-if "view" not in st.session_state:
-    st.session_state.view = "login"
+    if "view" not in st.session_state:
+        st.session_state.view = "login"
 
-# ROUTER
-if st.session_state.view == "login":
-    login_page(supabase)
-
-elif st.session_state.view == "signup":
-    signup_page(supabase)
-
-elif st.session_state.view == "dashboard":
-    st.write("✅ Welcome to Dashboard")  # TEMP TEST
-    # Replace with your real dashboard function
-    # show_dashboard()
+    # 2. THE MASTER ROUTER
+    # If NOT logged in, show the Auth screens
+    if not st.session_state.logged_in:
+        if st.session_state.view == "login":
+            login_page(supabase)
+        elif st.session_state.view == "signup":
+            signup_page(supabase)
+        elif st.session_state.view == "reset":
+            reset_password_ui(supabase)
     
-elif st.session_state.view == "reset":
-    reset_password_ui(supabase)
+    # If LOGGED IN, show the Dashboard
+    else:
+        # --- 1. SIDEBAR NAVIGATION ---
+        with st.sidebar:
+            st.header("🛠️ Navigation")
+            menu = {"Overview": "📊", "Settings": "⚙️", "Logout": "🚪"}
+            menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+            
+            # Use a key to prevent duplicate element errors
+            current_page = st.radio("Go to:", menu_options, key="main_nav")
+            
+            if "Logout" in current_page:
+                st.session_state.logged_in = False
+                st.session_state.view = "login" # Reset to login view for next time
+                st.rerun()
+
+        # --- 2. MAIN CONTENT AREA ---
+        st.write(f"### 📍 {current_page}") 
+        
+        try:
+            if "Overview" in current_page:
+                if 'show_overview' in globals():
+                    show_overview()
+                else:
+                    st.warning("⚠️ 'show_overview' function not found in code.")
+            
+            elif "Settings" in current_page:
+                st.info("Settings Page Coming Soon")
+                
+        except Exception as e:
+            st.error(f"🚨 Dashboard Error: {e}")
+
+
 
 # ==============================
 # 10. THE SIDEBAR NAVIGATION
@@ -2639,3 +2667,8 @@ else:
     elif "Settings" in current_page:
         require_role(["admin"])
         show_settings()
+
+
+# IMPORTANT: Ensure this is at the very bottom of your file
+if __name__ == "__main__":
+    main()
