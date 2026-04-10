@@ -132,8 +132,6 @@ def get_cached_data_refined(table_name):
         st.error(f"Database Error on {table_name}: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=3600)
-import base64
 
 # --- HELPER FUNCTIONS (Place these at the top of your app.py) ---
 
@@ -152,7 +150,7 @@ def upload_image(file):
     except Exception as e:
         st.error(f"Image upload failed: {str(e)}")
         return None
-
+@st.cache_data(ttl=3600)
 def save_data(table_name, dataframe):
     """Saves data to Supabase with tenant isolation."""
     if dataframe.empty:
