@@ -2417,7 +2417,8 @@ def show_settings():
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
     # --- SAVE BUTTON ---
-    if st.button("💾 Save Branding Changes", use_container_width=True):
+if st.button("💾 Save Branding Changes", use_container_width=True):
+    # Everything below is indented because it only runs if the button is clicked
     updated_data = {"brand_color": new_color}
     
     # 1. Update session state immediately so the sidebar color changes on rerun
@@ -2431,12 +2432,11 @@ def show_settings():
             file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
             
             # UPLOAD TO STORAGE
-            # Note: Using content_type as a direct argument is often more reliable
             supabase.storage.from_(bucket_name).upload(
                 path=file_path,
                 file=logo_file.getvalue(),
                 file_options={
-                    "x-upsert": "true", # Supabase API often looks for the x-prefix
+                    "x-upsert": "true",
                     "content-type": f"image/{file_ext}"
                 }
             )
@@ -2445,7 +2445,7 @@ def show_settings():
             updated_data["logo_url"] = file_path
             
         except Exception as e:
-            # If upload fails because it exists and upsert failed, try 'update'
+            # Fallback: if upload fails, try 'update'
             try:
                 supabase.storage.from_(bucket_name).update(
                     path=file_path,
@@ -2454,9 +2454,10 @@ def show_settings():
                 updated_data["logo_url"] = file_path
             except:
                 st.error(f"❌ Storage Error: {str(e)}")
-                return
+                # Use 'return' here to stop execution if the upload failed completely
+                st.stop()
 
-    # 3. UPDATE DATABASE (The missing link)
+    # 3. UPDATE DATABASE
     try:
         supabase.table("tenants")\
             .update(updated_data)\
@@ -2465,24 +2466,13 @@ def show_settings():
         
         st.success("🎉 Branding saved successfully!")
         
-        # 4. THE MOST IMPORTANT PART: Force a rerun to show the new colors/logo
+        # 4. REFRESH UI
+        # Clear cache and rerun to trigger new Sidebar CSS and Logo
+        st.cache_data.clear()
         st.rerun()
         
     except Exception as e:
         st.error(f"❌ Database Error: {str(e)}")
-        
-        # Update the database record
-        try:
-            supabase.table("tenants").update(updated_data).eq("id", st.session_state.tenant_id).execute()
-            
-            st.success("✅ Branding updated successfully!")
-            
-            # Clear cache and rerun to trigger new Sidebar CSS and Logo
-            st.cache_data.clear()
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Database Error: {str(e)}")
 import streamlit as st
 import time
 
