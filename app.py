@@ -813,26 +813,28 @@ def render_sidebar():
 
     with st.sidebar:
         # --- 2. CENTERED LOGO ---
-    # The columns trick [1, 2, 1] forces the middle column to the center
-    _, col_mid, _ = st.columns([1, 2, 1])
-    with col_mid:
-        if active_company.get('logo_url'):
-            st.image(active_company['logo_url'], width=80)
-        else:
-            st.write("🌍")
+        # All of this MUST be indented to stay inside the sidebar
+        _, col_mid, _ = st.columns([1, 2, 1])
+        with col_mid:
+            # We use get_logo() to fetch the bucket data we set up
+            logo_data = get_logo() 
+            if logo_data:
+                st.image(logo_data, width=80)
+            else:
+                st.write("🌍")
 
-    # --- 3. CENTERED INFO BOX ---
-    st.markdown(
-        f"""
-        <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
-                    padding: 10px; border-radius: 10px; margin-top: 10px;">
-            <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company['name']}</b></span>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-    
-    st.write("---")
+        # --- 3. CENTERED INFO BOX ---
+        st.markdown(
+            f"""
+            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
+                        padding: 10px; border-radius: 10px; margin-top: 10px;">
+                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        st.write("---")
 
 def show_sidebar_menu():
     """Displays the navigation radio and logout."""
@@ -851,9 +853,8 @@ def show_sidebar_menu():
         if st.button("🚪 Logout", use_container_width=True):
             logout()
     
-    # Strip the emoji to return just the page name
+    # Strip the emoji to return just the page name (e.g., "📊 Overview" -> "Overview")
     return selection.split(" ", 1)[1]
-
 
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
