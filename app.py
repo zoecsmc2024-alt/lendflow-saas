@@ -2367,20 +2367,26 @@ def show_settings():
                 st.error(f"❌ Storage Error: {str(e)}")
                 st.stop()
         
-        # Update the database record for this tenant
-        try:
-            supabase.table("tenants").update(updated_data).eq("id", st.session_state.tenant_id).execute()
+        # 1. FETCH OR CREATE TENANT INFO
+    try:
+        # We try to get the record
+        response = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).execute()
+        
+        if not response.data:
+            # If no record exists, create a default one so the page isn't empty!
+            default_data = {
+                "id": st.session_state.tenant_id,
+                "name": "Zoe Consults Client",
+                "brand_color": "#2B3F87"
+            }
+            supabase.table("tenants").insert(default_data).execute()
+            active_company = default_data
+        else:
+            active_company = response.data[0]
             
-            st.success("✅ Branding updated successfully!")
-            st.info("Applying your new brand identity...")
-            
-            # Clear cache so get_logo() and sidebar() pick up changes immediately
-            st.cache_data.clear()
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Database Error: {str(e)}")
-
+    except Exception as e:
+        st.error(f"Error loading settings: {e}")
+        return
 
 import streamlit as st
 import time
