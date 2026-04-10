@@ -17,41 +17,6 @@ import bcrypt
 from twilio.rest import Client
 import streamlit as st
 
-# 1. PLACEHOLDER FUNCTIONS (Must be defined BEFORE main)
-def show_overview():
-    st.title("📊 Financial Overview")
-    st.success("The dashboard is officially working!")
-
-def login_page(supabase):
-    # ... your login code ...
-    if st.button("Login"):
-        st.session_state.logged_in = True
-        st.rerun()
-
-# 2. THE MAIN ROUTER
-def main():
-    # Initialize state
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    
-    # --- LOGIC GATE ---
-    if not st.session_state.logged_in:
-        # If not logged in, show login
-        login_page(supabase)
-    else:
-        # If logged in, show the dashboard contents
-        with st.sidebar:
-            st.write("Logged In as Admin")
-            if st.button("Logout"):
-                st.session_state.logged_in = False
-                st.rerun()
-        
-        # Call the content function
-        show_overview()
-
-# 3. THE EXECUTION (Must be at the VERY BOTTOM)
-if __name__ == "__main__":
-    main()
 
 # ==============================
 # 1. SUPABASE CONNECTION (SaaS REPLACEMENT)
@@ -907,6 +872,17 @@ def save_logo_to_db(image_file):
     except Exception as e:
         st.error(f"❌ Logo Save Error: {e}")
         return False
+
+def main():
+    # Initialize state
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    
+    if not st.session_state.logged_in:
+        # Now main() can find login_page because it was defined above!
+        login_page(supabase)
+    else:
+        show_overview()
 
 
 
@@ -2605,55 +2581,118 @@ def show_settings():
             st.error(f"❌ Database Error: {str(e)}")
 
 
+import streamlit as st
+import time
+
+# ==========================================
+# 1. CORE PAGE FUNCTIONS (Define these first!)
+# ==========================================
+
+def show_overview():
+    """
+    Standard Overview Page.
+    """
+    st.markdown("## 📊 Financial Dashboard")
+    
+    # Simple metrics to prove it's working
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Loans", "0", "+0%")
+    col2.metric("Active Borrowers", "0", "0")
+    col3.metric("Revenue", "$0", "$0")
+    
+    st.info("👋 Welcome! Start by selecting a category from the sidebar.")
+
+def show_payroll():
+    st.title("🧾 Payroll Management")
+    st.write("Payroll records will appear here.")
+
+def show_settings():
+    st.title("⚙️ System Settings")
+    st.write("Configure your company profile and logo here.")
+
+# ==========================================
+# 2. SIDEBAR & NAVIGATION
+# ==========================================
+
+def show_sidebar():
+    """
+    Displays the sidebar navigation menu and handles logout logic.
+    """
+    menu = {
+        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
+        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
+        "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
+        "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
+    }
+
+    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+
+    with st.sidebar:
+        # Branding Header
+        st.title(f"🏢 {st.session_state.get('company_code', 'Zoe Consults')}")
+        st.write(f"👤 **{st.session_state.get('user_email', 'User')}**")
+        
+        st.divider()
+        
+        # Navigation Radio
+        selection = st.radio("Main Menu", menu_options, key="navigation_radio")
+
+        st.divider()
+        if st.button("🚪 Logout", use_container_width=True):
+            # Clear session state
+            st.session_state.logged_in = False
+            st.session_state.view = "login"
+            st.success("Logging out...")
+            time.sleep(1)
+            st.rerun()
+
+    return selection
+
+# ==========================================
+# 3. DASHBOARD ROUTER
+# ==========================================
+
+def dashboard_main():
+    """
+    This is the entry point for the 'Logged In' world.
+    """
+    # 1. Get current page from sidebar
+    selected_item = show_sidebar()
+    
+    # 2. Route to the correct function based on selection
+    if "Overview" in selected_item:
+        show_overview()
+    elif "Payroll" in selected_item:
+        show_payroll()
+    elif "Settings" in selected_item:
+        show_settings()
+    else:
+        # Placeholder for pages not yet built
+        st.title(selected_item)
+        st.info("This module is currently under development.")
+
+# ==========================================
+# 4. MAIN APP ENTRY POINT (THE BRAIN)
+# ==========================================
+
 def main():
-    # 1. Initialize session state variables
+    # A. Initialize session state variables
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     if "view" not in st.session_state:
         st.session_state.view = "login"
 
-    # 2. THE MASTER ROUTER
-    # If NOT logged in, show the Auth screens
+    # B. THE GATEKEEPER
     if not st.session_state.logged_in:
+        # AUTH WORLD
         if st.session_state.view == "login":
-            login_page(supabase)
+            login_page(supabase) # Ensure this is defined in your script!
         elif st.session_state.view == "signup":
-            signup_page(supabase)
-        elif st.session_state.view == "reset":
-            reset_password_ui(supabase)
-    
-    # If LOGGED IN, show the Dashboard
+            signup_page(supabase) # Ensure this is defined in your script!
     else:
-        # --- 1. SIDEBAR NAVIGATION ---
-        with st.sidebar:
-            st.header("🛠️ Navigation")
-            menu = {"Overview": "📊", "Settings": "⚙️", "Logout": "🚪"}
-            menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-            
-            # Use a key to prevent duplicate element errors
-            current_page = st.radio("Go to:", menu_options, key="main_nav")
-            
-            if "Logout" in current_page:
-                st.session_state.logged_in = False
-                st.session_state.view = "login" # Reset to login view for next time
-                st.rerun()
+        # APP WORLD
+        dashboard_main()
 
-        # --- 2. MAIN CONTENT AREA ---
-        st.write(f"### 📍 {current_page}") 
-        
-        try:
-            if "Overview" in current_page:
-                if 'show_overview' in globals():
-                    show_overview()
-                else:
-                    st.warning("⚠️ 'show_overview' function not found in code.")
-            
-            elif "Settings" in current_page:
-                st.info("Settings Page Coming Soon")
-                
-        except Exception as e:
-            st.error(f"🚨 Dashboard Error: {e}")
-
-# IMPORTANT: Ensure this is at the very bottom of your file
+# --- THE EXECUTION ---
 if __name__ == "__main__":
     main()
