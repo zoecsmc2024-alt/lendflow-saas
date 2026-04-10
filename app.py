@@ -2385,13 +2385,6 @@ def show_overview():
     
     st.info("👋 Welcome! Start by selecting a category from the sidebar.")
 
-def show_payroll():
-    st.title("🧾 Payroll Management")
-    st.write("Payroll records will appear here.")
-
-def show_settings():
-    st.title("⚙️ System Settings")
-    st.write("Configure your company profile and logo here.")
 
 # ==========================================
 # 2. SIDEBAR & NAVIGATION
