@@ -2367,27 +2367,26 @@ def show_settings():
                 st.error(f"❌ Storage Error: {str(e)}")
                 st.stop()
         
-        # 1. FETCH OR CREATE TENANT INFO
+        # 1. FETCH CURRENT TENANT INFO (Updated for your specific table)
     try:
-        # We try to get the record
-        response = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).execute()
+        tenant_resp = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).execute()
         
-        if not response.data:
-            # If no record exists, create a default one so the page isn't empty!
-            default_data = {
+        if not tenant_resp.data:
+            # If the row doesn't exist, create it so the page isn't blank!
+            new_tenant = {
                 "id": st.session_state.tenant_id,
-                "name": "Zoe Consults Client",
+                "name": "New Business",
+                "company_code": "DEFAULT", # Matching your screenshot
                 "brand_color": "#2B3F87"
             }
-            supabase.table("tenants").insert(default_data).execute()
-            active_company = default_data
+            supabase.table("tenants").insert(new_tenant).execute()
+            active_company = new_tenant
         else:
-            active_company = response.data[0]
+            active_company = tenant_resp.data[0]
             
     except Exception as e:
         st.error(f"Error loading settings: {e}")
         return
-
 import streamlit as st
 import time
 
