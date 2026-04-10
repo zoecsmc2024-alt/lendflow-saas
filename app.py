@@ -866,20 +866,35 @@ def render_sidebar():
     brand_color = theme_data.get('brand_color', '#2B3F87')
     company_name = theme_data.get('name', 'Zoe Consults')
 
-    # INJECT DYNAMIC THEME CSS (Only once!)
-    st.markdown(f"""
-        <style>
-            [data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
-            [data-testid="stSidebar"] *, [data-testid="stWidgetLabel"] p {{
-                color: white !important;
-            }}
-            [data-testid="stSidebar"] hr {{
-                border-color: rgba(255,255,255,0.2) !important;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
+    # INJECT DYNAMIC THEME CSS (STRONGER + TARGET CORRECT ELEMENTS)
+st.markdown(f"""
+    <style>
+        /* Main sidebar container */
+        section[data-testid="stSidebar"] {{
+            background-color: {brand_color} !important;
+        }}
+
+        /* Inner sidebar content */
+        section[data-testid="stSidebar"] > div {{
+            background-color: {brand_color} !important;
+        }}
+
+        /* Text inside sidebar */
+        section[data-testid="stSidebar"] * {{
+            color: white !important;
+        }}
+
+        /* Divider lines */
+        section[data-testid="stSidebar"] hr {{
+            border-color: rgba(255,255,255,0.2) !important;
+        }}
+
+        /* Fix buttons + labels */
+        section[data-testid="stSidebar"] button {{
+            color: white !important;
+        }}
+    </style>
+""", unsafe_allow_html=True)
 
     # USER DISPLAY LOGIC
     display_name = user_obj.email if hasattr(user_obj, 'email') else "Member"
