@@ -20,42 +20,31 @@ import base64
 from datetime import datetime
 from supabase import create_client
 
-
-
-@st.cache_data(ttl=600)
-def get_cached_data_refined(table_name):
-    """Fetches data with tenant isolation."""
-    try:
-        t_id = st.session_state.get('tenant_id')
-        if not t_id: return pd.DataFrame()
-        response = supabase.table(table_name).select("*").eq("tenant_id", t_id).execute()
-        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
-    except Exception as e:
-        st.error(f"Database Error: {e}")
-        return pd.DataFrame()
-# ==============================
+# ==========================================
 # 1. SUPABASE CONNECTION
-# ==============================
+# ==========================================
 try:
     SUPABASE_URL = st.secrets["supabase_url"]
     SUPABASE_KEY = st.secrets["supabase_key"]
+    # Ensure 'Client' and 'create_client' are imported in your actual script
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     st.error(f"❌ Connection to Supabase failed: {e}")
     st.stop()
 
-# ==============================
-# 2. MULT-TENANT SESSION STATE
-# ==============================
+# ==========================================
+# 2. MULTI-TENANT SESSION STATE
+# ==========================================
 if 'tenant_id' not in st.session_state:
     st.session_state.tenant_id = None 
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
+if 'theme_color' not in st.session_state:
+    st.session_state.theme_color = "#2B3F87"
 
-# ==============================
+# ==========================================
 # 3. BRANDING & PAGE CONFIG
-# ==============================
-# Ensure this is the VERY FIRST streamlit command called
+# ==========================================
 st.set_page_config(page_title="Zoe Admin", layout="wide", initial_sidebar_state="expanded")
 
 BRANDING = {
@@ -65,16 +54,68 @@ BRANDING = {
     "text_gray": "#666666"  
 }
 
+# ==========================================
+# 4. GLOBAL STYLER (FIXED)
+# ==========================================
+def apply_custom_theme(color):
+    """Applies the brand color to the sidebar and UI elements globally."""
+    st.session_state.theme_color = color
+    st.markdown(f"""
+        <style>
+        /* Target the sidebar and the inner content container */
+        [data-testid="stSidebar"], 
+        [data-testid="stSidebarContent"],
+        [data-testid="stSidebar"] > div:first-child {{
+            background-color: {color} !important;
+        }}
+        /* Sidebar text and navigation icons */
+        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
+            color: white !important;
+        }}
+        /* Widget labels (Radio, Selectbox) in sidebar */
+        [data-testid="stWidgetLabel"] p {{
+            color: white !important;
+        }}
+        /* Fix visibility for dropdown text */
+        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
+        ul[data-testid="stSelectboxVirtualList"] * {{ color: #1E3A8A !important; }}
+        .stSelectbox label p {{ color: white !important; }}
+        
+        /* Metric Card Styling */
+        div[data-testid="stMetric"] {{
+            background-color: white; 
+            padding: 15px; 
+            border-radius: 10px;
+            border-left: 5px solid {color}; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        h1, h2, h3 {{ color: {color}; }}
+        </style>
+    """, unsafe_allow_html=True)
 
+# THE MISSING LINK: Call the function immediately so the theme applies on load
+apply_custom_theme(st.session_state.theme_color)
 
+# ==========================================
+# 5. DATA LOADERS (VERIFIED)
+# ==========================================
+@st.cache_data(ttl=600)
+def get_cached_data_refined(table_name):
+    """Fetches data with tenant isolation."""
+    try:
+        t_id = st.session_state.get('tenant_id')
+        if not t_id: 
+            return pd.DataFrame()
+        response = supabase.table(table_name).select("*").eq("tenant_id", t_id).execute()
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+        return pd.DataFrame()
 
-# ==============================
-# 4. DATA LOADER (VERIFIED)
-# ==============================
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
+    """Legacy helper maintained for backward compatibility."""
     try:
-        # SAFETY CHECK: Don't query if we don't have a tenant yet
         if not st.session_state.tenant_id:
             return pd.DataFrame()
 
@@ -87,35 +128,15 @@ def get_cached_data(table_name):
             df = pd.DataFrame(response.data)
             return df.dropna(how='all').reset_index(drop=True)
         return pd.DataFrame()
-    except Exception as e:
-        # Quietly return empty DF on boot-up to prevent white screen
+    except Exception:
         return pd.DataFrame()
-
-
-# ==============================
-# 2. GLOBAL STYLER
-# ==============================
-def apply_custom_theme(color):
-    st.session_state.theme_color = color
-    st.markdown(f"""
-        <style>
-        [data-testid="stSidebar"] {{ background-color: {color} !important; }}
-        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-        [data-testid="stWidgetLabel"] p {{ color: white !important; }}
-        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
-        ul[data-testid="stSelectboxVirtualList"] * {{ color: #1E3A8A !important; }}
-        .stSelectbox label p {{ color: white !important; }}
-        div[data-testid="stMetric"] {{
-            background-color: white; padding: 15px; border-radius: 10px;
-            border-left: 5px solid {color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }}
-        h1, h2, h3 {{ color: {color}; }}
-        </style>
-    """, unsafe_allow_html=True)
-# ==============================
-# 6. DATA HELPERS (SUPABASE ENGINE)
-# ==============================
-import base64 # Necessary for the logo conversion
+# ==========================================
+# 6. STORAGE & DATA HELPERS
+# ==========================================
+import base64 
+from datetime import datetime
+import pandas as pd
+from fpdf import FPDF
 
 def get_logo():
     """
@@ -178,7 +199,9 @@ def get_cached_data_refined(table_name):
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
-        bucket_name = 'collateral-photos'
+        # NOTE: Check if your settings page uses this for the LOGO. 
+        # If it's a logo, it should probably go to 'company-logos'
+        bucket_name = 'collateral-photos' 
         file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
         supabase.storage.from_(bucket_name).upload(file_name, file.getvalue())
         res = supabase.storage.from_(bucket_name).get_public_url(file_name)
@@ -202,10 +225,10 @@ def save_data(table_name, dataframe):
         st.error(f"❌ Error saving to {table_name}: {e}")
         return False
 
-
 # ==========================================
 # 7. SECURITY & SESSION MANAGEMENT
 # ==========================================
+from datetime import datetime, timedelta  # Added timedelta for timeout logic
 
 SESSION_TIMEOUT = 15  # Minutes
 
@@ -418,6 +441,10 @@ def create_session(user_data, remember=False):
     if remember:
         st.session_state["remember"] = True
     
+    # Trigger theme application immediately on login
+    if "theme_color" in st.session_state:
+        apply_custom_theme(st.session_state.theme_color)
+        
     # CRITICAL: Force rerun so the UI switches views
     st.rerun()
 
@@ -454,7 +481,7 @@ def reset_password_ui(supabase):
         except Exception:
             st.error("Failed to send reset email")
 
-def authenticate(supabase, company_code, email, password):
+def authenticate_refined(supabase, company_code, email, password):
     """Specific Zoe Consults Auth logic with Company Code verification."""
     try:
         # 1. Sign in with Supabase Auth
@@ -465,9 +492,8 @@ def authenticate(supabase, company_code, email, password):
         
         if res.user:
             # 2. Verify relationship with the tenants table
-            # Fetches tenant data specifically to avoid subscripting None
             response = supabase.table("users") \
-                .select("tenant_id, tenants(company_code)") \
+                .select("tenant_id, role, tenants(company_code, name)") \
                 .eq("id", res.user.id) \
                 .execute()
             
@@ -483,11 +509,13 @@ def authenticate(supabase, company_code, email, password):
             db_company_code = tenant_info.get('company_code', '').upper()
             
             if db_company_code == company_code.upper():
+                # Returning data in the format create_session expects
                 return {
                     "success": True, 
-                    "user": res.user, 
-                    "session": getattr(res, 'session', None), # Safety check for session
-                    "tenant_id": user_record['tenant_id']
+                    "user_id": res.user.id, 
+                    "tenant_id": user_record['tenant_id'],
+                    "role": user_record.get("role", "Admin"),
+                    "company": tenant_info.get("name", "Unknown")
                 }
             else:
                 return {"success": False, "error": f"Invalid Company Code."}
@@ -496,7 +524,6 @@ def authenticate(supabase, company_code, email, password):
         return {"success": False, "error": str(e)}
 
     return {"success": False, "error": "Authentication failed."}
-
 # ==========================================
 # 12. LOGIN & SIGNUP PAGES
 # ==========================================
@@ -704,38 +731,40 @@ def run_auth_ui(supabase):
 
 def apply_ui_theme():
     """
-    Applies the Zoe Consults / SaaS UI theme.
-    Logic and CSS are preserved exactly.
+    Applies the dynamic theme based on session state.
     """
-    st.markdown("""
+    # Use the color from session state, fallback to default if not set
+    color = st.session_state.get("theme_color", "#0A192F")
+    
+    st.markdown(f"""
     <style>
-        /* 1. PAGE LAYOUT: FULL WIDTH */
-        .block-container {
+        /* 1. PAGE LAYOUT */
+        .block-container {{
             max-width: 100% !important;
             padding-top: 2rem !important;
             padding-bottom: 2rem !important;
             padding-left: 5rem !important;
             padding-right: 5rem !important;
-        }
+        }}
 
         /* 2. MAIN APP BACKGROUND */
-        .stApp {
-            background-color: #F0F8FF !important; /* Baby Blue Page BG */
-        }
+        .stApp {{
+            background-color: #F0F8FF !important; 
+        }}
 
-        /* 3. THE DEEP BLUE SIDEBAR */
-        [data-testid="stSidebar"] {
-            background-color: #0A192F !important; /* Deep Midnight Blue */
+        /* 3. DYNAMIC SIDEBAR - Fixed to use {color} variable */
+        [data-testid="stSidebar"] {{
+            background-color: {color} !important; 
             min-width: 260px !important;
-        }
+        }}
 
         /* Sidebar Branding Text */
-        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] p, [data-testid="stSidebar"] b {
+        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] p, [data-testid="stSidebar"] b {{
             color: #F0F8FF !important;
-        }
+        }}
 
-        /* 4. REMOVE BUTTON BOXES - TEXT ONLY NAV */
-        section[data-testid="stSidebar"] .stButton > button {
+        /* 4. TEXT ONLY NAV */
+        section[data-testid="stSidebar"] .stButton > button {{
             background-color: transparent !important;
             color: #F0F8FF !important; 
             border: none !important;     
@@ -747,100 +776,81 @@ def apply_ui_theme():
             font-size: 16px !important;
             font-weight: 400 !important;
             transition: all 0.3s ease !important;
-        }
+        }}
 
-        /* Hover Effect: Text Glows & Slides Right Slightly */
-        section[data-testid="stSidebar"] .stButton > button:hover {
+        section[data-testid="stSidebar"] .stButton > button:hover {{
             color: #FFFFFF !important; 
             background-color: rgba(240, 248, 255, 0.1) !important; 
             padding-left: 25px !important; 
-            text-decoration: none !important;
-        }
-
-        /* Active Page Indicator */
-        section[data-testid="stSidebar"] .stButton > button:focus {
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-            background-color: transparent !important;
-        }
+        }}
 
         /* 5. METRIC CARDS */
-        div[data-testid="stMetric"] {
+        div[data-testid="stMetric"] {{
             background-color: #FFFFFF !important;
             border: 1px solid #E0E0E0 !important;
-            border-left: 8px solid #0A192F !important; 
+            border-left: 8px solid {color} !important; 
             border-radius: 12px !important;
             padding: 20px !important;
-        }
-
-        /* 6. HIDE THE DEFAULT OVERLAY ON HOVER */
-        button:focus:not(:focus-visible) {
-            outline: none !important;
-            box-shadow: none !important;
-        }
+        }}
     </style>
     """, unsafe_allow_html=True)
+
 # ==========================================
-# 16. UTILITY FUNCTIONS (VERIFIED)
+# 16. UTILITY FUNCTIONS (SYNCED)
 # ==========================================
 
-def send_whatsapp(phone, msg):
-    """Sends WhatsApp message via Twilio using SaaS secrets."""
-    try:
-        # Using the renamed TwilioClient from our imports
-        client_tw = TwilioClient(st.secrets["TWILIO_SID"], st.secrets["TWILIO_TOKEN"])
-        target_phone = f'whatsapp:{phone}'
-        
-        client_tw.messages.create(
-            from_=st.secrets.get("TWILIO_WHATSAPP_FROM", 'whatsapp:+14155238886'),
-            body=msg,
-            to=target_phone
-        )
-        return True
-    except Exception as e:
-        st.error(f"⚠️ WhatsApp failed: {e}")
-        return False
-
-def save_logo_to_db(image_file):
-    """Saves tenant logo as Base64 to Supabase."""
+def save_logo_to_storage(image_file):
+    """
+    Saves logo to Supabase Storage and updates the 'tenants' table.
+    This fixes the disconnect between saving and loading.
+    """
     try:
         t_id = st.session_state.get("tenant_id")
         if not t_id:
             st.error("No tenant session found.")
             return False
 
+        # 1. Generate filename
+        file_ext = image_file.name.split('.')[-1]
+        file_name = f"{t_id}_logo.{file_ext}"
+        
+        # 2. Upload to the correct bucket (company-logos)
         image_file.seek(0)
-        encoded = base64.b64encode(image_file.read()).decode()
+        supabase.storage.from_('company-logos').upload(
+            path=file_name, 
+            file=image_file.read(),
+            file_options={"upsert": "true"} # Overwrite if exists
+        )
         
-        data = {
-            "tenant_id": t_id,
-            "key": "logo",
-            "value": encoded
-        }
+        # 3. Update the 'tenants' table so get_logo() can find it
+        supabase.table("tenants").update({"logo_url": file_name}).eq("id", t_id).execute()
         
-        # Upsert ensures we update the existing logo for this tenant
-        supabase.table("settings").upsert(data, on_conflict="tenant_id, key").execute()
         st.cache_data.clear() 
         return True
     except Exception as e:
-        st.error(f"❌ Logo Save Error: {e}")
+        st.error(f"❌ Logo Upload Error: {e}")
         return False
-# --- 1. THEME HELPER ---
+
+# --- THEME & LOGO HELPERS ---
+
 def get_current_theme():
     tenant_id = st.session_state.get("tenant_id")
     try:
         res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).execute()
         if res.data:
+            # Sync the color to session state for the CSS to pick up
+            st.session_state.theme_color = res.data[0].get('brand_color', '#2B3F87')
             return res.data[0]
     except Exception:
         pass
     return {'brand_color': '#2B3F87', 'name': 'Zoe Consults'}
 
-# --- 2. LOGO HELPER ---
 def get_logo():
+    """Downloads logo from 'company-logos' based on the path in 'tenants' table."""
     try:
         tenant_id = st.session_state.get("tenant_id")
         res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
+        
         if res.data and res.data[0].get("logo_url"):
             file_path = res.data[0]["logo_url"]
             file_data = supabase.storage.from_('company-logos').download(file_path)
@@ -860,20 +870,16 @@ def render_sidebar():
     This consolidated version prevents NameErrors and UI drops.
     """
     # 1. FETCH THE THEME DATA
-    # We call this once to get the color and company name
     theme_data = get_current_theme()
     brand_color = theme_data.get('brand_color', '#2B3F87')
     company_name = theme_data.get('name', 'Zoe Consults')
     
     # 2. INJECT DYNAMIC THEME CSS
-    # This must be indented inside the function to work!
     st.markdown(f"""
         <style>
-            /* Main sidebar background */
-            section[data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
-            /* Force the inner container to match (removes grey patches) */
+            /* Main sidebar background and content area */
+            section[data-testid="stSidebar"], 
+            [data-testid="stSidebarContent"],
             section[data-testid="stSidebar"] > div:first-child {{
                 background-color: {brand_color} !important;
             }}
@@ -884,6 +890,10 @@ def render_sidebar():
             /* Fix radio button labels specifically */
             section[data-testid="stWidgetLabel"] p {{
                 color: white !important;
+            }}
+            /* Style the horizontal divider in sidebar */
+            hr {{
+                border-color: rgba(255, 255, 255, 0.2) !important;
             }}
         </style>
     """, unsafe_allow_html=True)
@@ -897,6 +907,7 @@ def render_sidebar():
             if logo_data:
                 st.image(logo_data, width=80)
             else:
+                # Fallback if no logo is found
                 st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
         # --- TENANT INFO BOX ---
@@ -2350,11 +2361,9 @@ def show_settings():
     # 1. FETCH OR INITIALIZE TENANT INFO
     try:
         tenant_id = st.session_state.get("tenant_id")
-        # We use .execute() and check data to prevent the 'single()' empty result crash
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         
         if not tenant_resp.data:
-            # If no record exists in your table yet, we create one so the page isn't blank
             new_tenant = {
                 "id": tenant_id,
                 "name": "Zoe Consults Client",
@@ -2376,14 +2385,12 @@ def show_settings():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Use .get() fallbacks to prevent KeyErrors
         biz_name = active_company.get('name', 'My Business')
         biz_code = active_company.get('company_code', 'N/A')
         
         st.markdown(f"**Current Business Name:** {biz_name}")
         st.markdown(f"**Company Code:** `{biz_code}`")
         
-        # Color Picker logic
         current_brand_color = active_company.get('brand_color', '#2B3F87')
         new_color = st.color_picker("🎨 Change Brand Color", current_brand_color)
         
@@ -2398,7 +2405,6 @@ def show_settings():
     with col2:
         st.markdown("**Company Logo:**")
         
-        # We use the get_logo() helper to pull from the BUCKET for the preview
         try:
             logo_data = get_logo()
             if logo_data:
@@ -2406,43 +2412,42 @@ def show_settings():
             else:
                 st.caption("No logo uploaded yet.")
         except NameError:
-            # Fallback if get_logo isn't defined yet
             st.caption("Logo helper not found.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-        # We prepare the update dictionary
         updated_data = {"brand_color": new_color}
+        
+        # Update session state immediately for the current run
+        st.session_state.theme_color = new_color
         
         # Handle logo upload to Supabase Storage
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                
-                # 1. Clean extension handling (prevents .png.jpeg issues)
                 file_ext = logo_file.name.split('.')[-1].lower()
+                # Unique filename based on tenant ID
                 file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
                 
-                # 2. UPLOAD TO STORAGE (Direct Bucket Access)
-                # We use file_ext to dynamically set the content-type
+                # UPLOAD TO STORAGE
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
-                        "x-upsert": "true",
+                        "upsert": "true", # Corrected key for overwriting
                         "content-type": f"image/{file_ext}"
                     }
                 )
                 
-                # 3. Save the PATH to the database
+                # Save the PATH to the database
                 updated_data["logo_url"] = file_path
                 
             except Exception as e:
                 st.error(f"❌ Storage Error: {str(e)}")
-                st.info("Ensure the 'company-logos' bucket exists and RLS policies allow uploads!")
-                return # Stop if upload fails
+                st.info("Check if 'company-logos' bucket exists and RLS allows uploads.")
+                return 
         
         # Update the database record
         try:
@@ -2450,7 +2455,7 @@ def show_settings():
             
             st.success("✅ Branding updated successfully!")
             
-            # 4. Clear cache and rerun to trigger the new CSS and Logo
+            # Clear cache and rerun to trigger new Sidebar CSS and Logo
             st.cache_data.clear()
             st.rerun()
             
