@@ -865,64 +865,92 @@ def get_logo():
 # ==========================================
 
 def render_sidebar():
-    # 1. Initialize variables with fallbacks to prevent NameErrors
+    # 1. Initialize variables
     theme_data = {}
     company_name = "Super admin"
     
-    # 2. Safely fetch branding info from 'tenants' (the new source of truth)
-    try:
-        theme_data = get_current_theme() or {}
-        company_name = theme_data.get('name', 'Super admin')
-    except Exception:
-        pass
-    
-    # Priority: Session State (Instant) > Database > Default Blue
+    # 2. Fetch Branding - Priority: Database
+    tenant_id = st.session_state.get('tenant_id')
+    if tenant_id:
+        try:
+            # We fetch fresh every time to ensure the sidebar stays in sync
+            res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).single().execute()
+            if res.data:
+                theme_data = res.data
+                company_name = theme_data.get('name', 'Super admin')
+        except Exception:
+            pass
+
+    # 3. REACTIVITY ENGINE: Priority to Session State
+    # If the user just picked a new color in Settings, this uses it INSTANTLY
     brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#1E3A8A'))
     
-    # 3. Apply the CSS (Borrowing the Metric Glow-up from your old code)
+    # 4. Apply the CSS (Borrowed and fixed for specificity)
     st.markdown(f"""
         <style>
-            section[data-testid="stSidebar"] {{
+            /* Sidebar background */
+            [data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            section[data-testid="stSidebar"] * {{
+            
+            /* Sidebar text and icons */
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
                 color: white !important;
             }}
-            /* Center the radio menu items */
-            div.row-widget.stRadio > div {{ flex-direction: column; align-items: center; }}
-            div.row-widget.stRadio > div[role="radiogroup"] > label {{ justify-content: center; text-align: center; width: 100%; }}
 
-            /* BORROWED: The Metric Card Glow-up */
+            /* Centering the Radio Buttons */
+            [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
+                flex-direction: column; 
+                align-items: center; 
+            }}
+            [data-testid="stSidebar"] div.row-widget.stRadio > div[role="radiogroup"] > label {{ 
+                justify-content: center; 
+                text-align: center; 
+                width: 100%; 
+            }}
+
+            /* The Metric Card Glow-up */
             div[data-testid="stMetric"] {{
-                background-color: white; padding: 15px; border-radius: 10px;
-                border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                background-color: white; 
+                padding: 15px; 
+                border-radius: 10px;
+                border-left: 5px solid {brand_color}; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }}
             
-            /* Keep main page input labels readable on white background */
+            /* Metric text colors (so they are readable on white) */
+            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{
+                color: #31333F !important;
+            }}
+
+            /* Main Page Headings */
+            h1, h2, h3 {{ color: {brand_color} !important; }}
+            
+            /* Main Page Labels */
             .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
-            h1, h2, h3 {{ color: {brand_color}; }}
         </style>
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        # 4. BORROWED: Centered Logo Columns
+        # 5. Centered Logo
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            logo_url = get_logo()  # This now has the ?t= timestamp helper
+            logo_url = get_logo()  # Ensure your get_logo() uses the timestamp ?t=
             if logo_url:
                 st.image(logo_url, width=80)
             else:
-                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
+                st.markdown("<h1 style='text-align: center; margin:0;'>🌍</h1>", unsafe_allow_html=True)
 
-        # 5. Centered Info Box (Premium Look)
+        # 6. Centered Info Box
         user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
-            <div style="text-align: center; background: rgba(255,255,255,0.08); padding: 12px; border-radius: 12px; margin-top: 10px;">
-                <span style="font-size: 14px; font-weight: bold;">📍 {company_name}</span><br>
-                <small style="opacity: 0.7;">{user_email}</small>
+            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 14px; font-weight: bold; color: white;">📍 {company_name}</span><br>
+                <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
             </div>
         """, unsafe_allow_html=True)
         
+        st.write("") # Spacer
         st.divider()
 
 def show_sidebar_menu():
@@ -935,24 +963,16 @@ def show_sidebar_menu():
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
 
     with st.sidebar:
-        # Get the current index to keep the radio button sticky on rerun
-        current_page = st.session_state.get('current_page', "📈 Overview")
-        
-        # Determine the index for the radio button
-        try:
-            default_index = [m.split(" ", 1)[1] for m in menu_options].index(current_page.replace("📈 ", "").replace("⚙️ ", ""))
-        except:
-            default_index = 0
-
+        # Navigation
         selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
         
-        st.write("---")
+        st.divider()
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
     
-    # Return clean string for the 'if page == "Settings":' logic
-    return selection.split(" ", 1)[1]
+    # Return the clean text (e.g. "Overview")
+    return selection.split(" ", 1)[1] if " " in selection else selection
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
@@ -2432,23 +2452,20 @@ def show_settings():
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-        # We start with the color change
         updated_data = {"brand_color": new_color}
         
-        # Handle logo upload to Supabase Storage
+        # 1. Handle logo upload
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                # Clean the path
                 file_path = f"logos/{active_company['id']}_logo.png"
                 
-                # --- THE FIX: ADD CONTENT-TYPE ---
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
+                        "content-type": "image/png"
                     }
                 )
                 
@@ -2460,58 +2477,47 @@ def show_settings():
                 st.error(f"❌ Storage Error: {str(e)}")
                 st.stop()
         
-        # Update the database record for this company
+        # 2. Update Database & UPDATE SESSION STATE (The Missing Link)
         try:
             supabase.table("tenants").update(updated_data).eq("id", tenant_id).execute()
             
+            # --- THE REFRESH FIX ---
+            # We manually update the session state so the sidebar sees it NOW
+            st.session_state['theme_color'] = new_color
+            
+            # If a new logo was uploaded, we clear any cached logo URL
+            if logo_file:
+                st.session_state['logo_url'] = updated_data["logo_url"]
+            
             st.success("✅ Branding updated successfully!")
-            st.info("Applying your new brand identity...")
-            # Use st.rerun() to refresh the sidebar and theme instantly
+            
+            # Use a small delay so the user sees the success message, then rerun
+            import time
+            time.sleep(1)
             st.rerun()
             
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
-# 1. CORE PAGE FUNCTIONS (Define these first!)
+# 1. CORE PAGE FUNCTIONS (Branding Aware)
 # ==========================================
 
+def get_active_color():
+    """Helper to get the current theme color for consistent UI styling."""
+    return st.session_state.get('theme_color', '#1E3A8A')
+
 def show_overview():
-    """
-    Standard Overview Page.
-    """
-    st.markdown("## 📊 Financial Dashboard")
+    """Standard Overview Page with Dynamic Branding."""
+    brand_color = get_active_color()
+    st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
     
-    # Simple metrics to prove it's working
     col1, col2, col3 = st.columns(3)
+    # Using standard metrics which are now styled by our sidebar CSS
     col1.metric("Total Loans", "0", "+0%")
     col2.metric("Active Borrowers", "0", "0")
     col3.metric("Revenue", "$0", "$0")
     
     st.info("👋 Welcome! Start by selecting a category from the sidebar.")
-
-
-# ==========================================
-# 2. SIDEBAR & NAVIGATION
-# ==========================================
-
-def show_sidebar_menu():
-    """Displays the navigation radio and logout."""
-    menu = {
-        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
-        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
-        "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
-        "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
-    }
-    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-
-    with st.sidebar:
-        selection = st.radio("Main Menu", menu_options)
-        st.divider()
-        if st.button("🚪 Logout", use_container_width=True):
-            logout()
-    
-    return selection.split(" ", 1)[1]
-
 
 # ==========================================
 # 18. DASHBOARD & MAIN EXECUTION
@@ -2520,11 +2526,12 @@ def show_sidebar_menu():
 def show_dashboard_view():
     """
     Main Dashboard view. 
-    Maintains exact UI/Logic but powered by Supabase Tenant Data.
+    Synchronized with Tenant brand_color.
     """
-    st.markdown("## 📊 Financial Dashboard")
+    brand_color = get_active_color()
+    st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
     
-    # 1. LOAD TENANT-SPECIFIC DATA
+    # 1. LOAD DATA
     df = get_cached_data("loans")
     pay_df = get_cached_data("payments")
     exp_df = get_cached_data("expenses") 
@@ -2533,57 +2540,55 @@ def show_dashboard_view():
         st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
         return
 
-    # 2. TRANSLATE HEADERS
+    # 2. TRANSLATE & CLEAN (Your existing logic)
     df.columns = df.columns.str.strip().str.replace(" ", "_")
-    if not pay_df.empty:
-        pay_df.columns = pay_df.columns.str.strip().str.replace(" ", "_")
-    if not exp_df.empty:
-        exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
+    for d in [pay_df, exp_df]:
+        if not d.empty: d.columns = d.columns.str.strip().str.replace(" ", "_")
 
-    # 3. CLEAN DATA TYPES
     df["Interest"] = pd.to_numeric(df.get("Interest", 0), errors="coerce").fillna(0)
     df["Amount_Paid"] = pd.to_numeric(df.get("Amount_Paid", 0), errors="coerce").fillna(0)
     df["Principal"] = pd.to_numeric(df.get("Principal", 0), errors="coerce").fillna(0)
     df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
     
     today = pd.Timestamp.now().normalize()
-    
-    # RECOVERY FILTER
     active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
     active_df = df[df["Status"].isin(active_statuses)].copy()
 
-    # 4. METRICS CALCULATION
+    # 3. METRICS CALCULATION
     total_issued = active_df["Principal"].sum() if not active_df.empty else 0
     total_interest_expected = active_df["Interest"].sum() if not active_df.empty else 0
     total_collected = df["Amount_Paid"].sum() 
-    
-    overdue_count = 0
-    if not active_df.empty:
-        overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
-        overdue_count = active_df[overdue_mask].shape[0]
+    overdue_count = active_df[(active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")].shape[0] if not active_df.empty else 0
 
-    # 5. METRICS ROW
+    # 4. BRANDED METRICS ROW
     m1, m2, m3, m4 = st.columns(4)
     
-    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    # We use f-strings to inject the {brand_color} into the border-left and text
+    metric_style = f"background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
+    
+    m1.markdown(f"""<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m2.markdown(f"""<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    
+    # Collected stays Green, Overdue stays Red for safety
     m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
 
-    # 6. RECENT ACTIVITY TABLES
+    # 5. BRANDED TABLES
     st.write("---")
     t1, t2 = st.columns(2)
 
     with t1:
-        st.markdown("<h4 style='color: #4A90E2;'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+        st.markdown(f"<h4 style='color: {brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
         rows_html = ""
         if not active_df.empty:
             recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
-            for i, (idx, r) in enumerate(recent_loans.iterrows()):
-                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#4A90E2;">{float(r.get('Principal', 0)):,.0f}</td><td style="padding:10px; text-align:center;"><span style="font-size:10px; background:#e1f5fe; padding:2px 5px; border-radius:5px;">{r.get('Status', 'Active')}</span></td><td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('End_Date')).strftime('%d %b') if pd.notna(r.get('End_Date')) else "-"}</td></tr>"""
-        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #4A90E2;"><thead><tr style="background:#4A90E2; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
+            for i, (_, r) in enumerate(recent_loans.iterrows()):
+                bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
+                rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #eee;"><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold; color:{brand_color};">{float(r.get('Principal', 0)):,.0f}</td><td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r.get('Status', 'Active')}</span></td><td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('End_Date')).strftime('%d %b') if pd.notna(r.get('End_Date')) else "-"}</td></tr>"""
+        
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid {brand_color}33;"><thead><tr style="background:{brand_color}; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
 
+    # ... (Keep t2 and Charts logic as you have it, they work great!)
     with t2:
         st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
         pay_rows = ""
@@ -2618,63 +2623,80 @@ def show_dashboard_view():
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# FINAL APP ROUTER (SYNCED TO YOUR DEFS)
+# FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
+
 if __name__ == "__main__":
+    # 1. Load the Theme FIRST
+    # Ensure this function uses st.session_state.get('theme_color')
     apply_ui_theme() 
     
     if not st.session_state.get("logged_in"):
         run_auth_ui(supabase)
     else:
+        # Check if the user is still active
         check_session_timeout()
+        
+        # Draw the sidebar (Logo + Branding)
         render_sidebar()
         
+        # Get the current selection from the radio menu
         page = show_sidebar_menu()
         
+        # Save the current page to session state 
+        # This helps Streamlit remember where you are after a rerun
+        st.session_state['current_page'] = page
+
         try:
-            if page == "Settings":
-                show_settings()
-            elif page == "Overview":
-                show_dashboard_view()
+            # Create a main container so the page content stays separate from the sidebar
+            main_container = st.container()
+            
+            with main_container:
+                if page == "Settings":
+                    show_settings()
                 
-            elif page == "Loans":
-                # Matches your 'def show_loans' exactly!
-                show_loans() 
-                
-            elif page == "Borrowers":
-                show_borrowers()
+                elif page == "Overview":
+                    show_dashboard_view()
+                    
+                elif page == "Loans":
+                    show_loans() 
+                    
+                elif page == "Borrowers":
+                    show_borrowers()
 
-            elif page == "Collateral":
-                show_collateral()
+                elif page == "Collateral":
+                    show_collateral()
 
-            elif page == "Calendar":
-                show_calendar()
+                elif page == "Calendar":
+                    show_calendar()
 
-            elif page == "Ledger":
-                show_ledger()
+                elif page == "Ledger":
+                    show_ledger()
 
-            elif page == "Overdue Tracker":
-                show_overdue_tracker()
+                elif page == "Overdue Tracker":
+                    show_overdue_tracker()
 
-            elif page == "Payments":
-                show_payments()
-                
-            elif page == "Expenses":
-                show_expenses()
-                
-            elif page == "PettyCash":
-                show_petty_cash()
-                
-            elif page == "Payroll":
-                show_payroll()
+                elif page == "Payments":
+                    show_payments()
+                    
+                elif page == "Expenses":
+                    show_expenses()
+                    
+                elif page == "PettyCash":
+                    show_petty_cash()
+                    
+                elif page == "Payroll":
+                    show_payroll()
 
-            elif page == "Reports":
-                show_reports()
-                
-            else:
-                st.info(f"The {page} module is coming online soon.")
+                elif page == "Reports":
+                    show_reports()
+                    
+                else:
+                    st.info(f"The {page} module is coming online soon.")
 
         except NameError as e:
-            st.error(f"🚨 **Mapping Error!**")
-            st.warning(f"Python is looking for a function that isn't named correctly: {e}")
-            st.info("Double-check that your 'def' name matches the one in this list!")
+            st.error("🚨 **Mapping Error!**")
+            st.warning(f"Python can't find the function: {e}")
+            st.info("Check if you used 'def show_loans():' or just 'show_loans():'")
+        except Exception as e:
+            st.error(f"Something went wrong: {e}")
