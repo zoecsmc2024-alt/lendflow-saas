@@ -514,7 +514,7 @@ def login_page(supabase):
     with col:
         st.markdown("<h2 style='text-align:center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
 
-        company = st.text_input("🏢 Company Code", key="login_comp").strip().upper()
+        company = st.text_input("🏢 Company Code", key="login_comp_unique").strip().upper()
         email = st.text_input("📧 Email", key="login_email").strip().lower()
         password = st.text_input("🔑 Password", type="password", key="login_pass")
 
@@ -862,32 +862,18 @@ def save_logo_to_db(image_file):
         st.error(f"❌ Logo Save Error: {e}")
         return False
 def main():
-    # 1. Initialize session state variables if they don't exist
+    # 1. Initialize session state
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     if "view" not in st.session_state:
         st.session_state.view = "login"
 
-    # 2. THE ROUTER LOGIC
+    # 2. THE ROUTER
     if not st.session_state.logged_in:
-        # Show Login or Signup UI
         run_auth_ui(supabase)
     else:
-        # SHOW THE DASHBOARD!
-        show_dashboard() 
-
-def show_dashboard():
-    st.title(f"🚀 Zoe Consults Dashboard")
-    st.write(f"Welcome back, {st.session_state.get('user_email', 'User')}!")
-    st.info(f"Connected to Company: {st.session_state.get('company_code', 'Unknown')}")
-    
-    if st.button("Log Out"):
-        st.session_state.logged_in = False
-        st.rerun()
-
-if __name__ == "__main__":
-    main()
-
+        # This calls the "Big" dashboard logic at the bottom of your script
+        show_dashboard()
 
 # ==============================
 # 10. THE SIDEBAR NAVIGATION
