@@ -790,71 +790,58 @@ def save_logo_to_db(image_file):
         return False
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (VERIFIED & FIXED)
+# 17. SIDEBAR & NAVIGATION (FIXED & SECURE)
 # ==========================================
 
 def render_sidebar():
     """Handles tenant branding and user info display."""
+    # 1. AUTH & SESSION CHECKS
     role = st.session_state.get("role", "Staff")
-    
-    # --- DYNAMIC USER EXTRACTION ---
+    tenant_id = st.session_state.get("tenant_id")
     user_obj = st.session_state.get("user")
     
-    # Safely extract the email to avoid the "Supabase Object Dump"
+    # --- FETCH TENANT DATA (Fixes NameError: active_company) ---
+    try:
+        tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
+        active_company = tenant_resp.data[0] if tenant_resp.data else {"name": "Zoe Consults"}
+    except Exception:
+        active_company = {"name": "Zoe Consults"}
+
+    # --- DYNAMIC USER EXTRACTION ---
     if hasattr(user_obj, 'email'):
         display_name = user_obj.email
     elif isinstance(user_obj, dict):
         display_name = user_obj.get('email', 'User')
     else:
         display_name = "Member"
-        
-    company_name = st.session_state.get("company", "ZOE CONSULTS")
-    
 
     with st.sidebar:
         # --- 2. CENTERED LOGO ---
-        # All of this MUST be indented to stay inside the sidebar
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            # We use get_logo() to fetch the bucket data we set up
-            logo_data = get_logo() 
-            if logo_data:
-                st.image(logo_data, width=80)
-            else:
-                st.write("🌍")
+            # IMPORTANT: Ensure 'def get_logo():' is written ABOVE this function in your file!
+            try:
+                logo_data = get_logo() 
+                if logo_data:
+                    st.image(logo_data, width=80)
+                else:
+                    st.write("🌍")
+            except NameError:
+                st.warning("get_logo() missing")
 
         # --- 3. CENTERED INFO BOX ---
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
                         padding: 10px; border-radius: 10px; margin-top: 10px;">
-                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span>
+                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
+                <small style="color: #888;">{display_name} ({role})</small>
             </div>
             """, 
             unsafe_allow_html=True
         )
         
         st.write("---")
-
-def show_sidebar_menu():
-    """Displays the navigation radio and logout."""
-    menu = {
-        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
-        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
-        "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
-        "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
-    }
-
-    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-
-    with st.sidebar:
-        selection = st.radio("Main Menu", menu_options)
-        st.divider()
-        if st.button("🚪 Logout", use_container_width=True):
-            logout()
-    
-    # Strip the emoji to return just the page name (e.g., "📊 Overview" -> "Overview")
-    return selection.split(" ", 1)[1]
 
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
