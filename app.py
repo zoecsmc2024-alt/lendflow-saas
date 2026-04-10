@@ -809,22 +809,24 @@ def save_logo_to_db(image_file):
         return False
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (FIXED & SECURE)
+# 17. SIDEBAR & NAVIGATION (THEME SYNCED)
 # ==========================================
 
 def render_sidebar():
     """Handles tenant branding and user info display with dynamic CSS."""
-    # 1. AUTH & SESSION CHECKS
     role = st.session_state.get("role", "Staff")
     tenant_id = st.session_state.get("tenant_id")
     user_obj = st.session_state.get("user")
     
-    # --- FETCH TENANT DATA (Fixes NameError: active_company) ---
+    # 1. FETCH TENANT DATA
     try:
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         if tenant_resp.data:
             active_company = tenant_resp.data[0]
-            brand_color = active_company.get('brand_color', '#2B3F87') # Default Zoe Blue
+            # Ensure we get a valid hex code or default to Zoe Blue
+            brand_color = active_company.get('brand_color')
+            if not brand_color or len(brand_color) < 4:
+                brand_color = '#2B3F87'
         else:
             active_company = {"name": "Zoe Consults"}
             brand_color = '#2B3F87'
@@ -832,24 +834,36 @@ def render_sidebar():
         active_company = {"name": "Zoe Consults"}
         brand_color = '#2B3F87'
 
-    # --- 2. DYNAMIC THEME INJECTION (Fixes Sidebar Theme) ---
+    # 2. DYNAMIC THEME INJECTION
+    # This specifically targets the sidebar background and all text elements
     st.markdown(f"""
         <style>
-            [data-testid="stSidebar"] {{
+            /* The main sidebar container */
+            section[data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            /* Forces all text in sidebar to white for readability against brand colors */
-            [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] h3 {{
+            
+            /* Target all text elements within the sidebar */
+            section[data-testid="stSidebar"] .stText, 
+            section[data-testid="stSidebar"] span, 
+            section[data-testid="stSidebar"] p, 
+            section[data-testid="stSidebar"] label {{
                 color: white !important;
             }}
-            /* Fixes the radio button text color specifically */
-            [data-testid="stWidgetLabel"] p {{
+
+            /* Fixes the radio button unselected state text */
+            section[data-testid="stSidebar"] .st-eb {{
                 color: white !important;
+            }}
+
+            /* Fixes the divider/horizontal rule */
+            section[data-testid="stSidebar"] hr {{
+                border-color: rgba(255, 255, 255, 0.3) !important;
             }}
         </style>
     """, unsafe_allow_html=True)
 
-    # --- DYNAMIC USER EXTRACTION ---
+    # 3. DYNAMIC USER EXTRACTION
     if hasattr(user_obj, 'email'):
         display_name = user_obj.email
     elif isinstance(user_obj, dict):
@@ -858,12 +872,11 @@ def render_sidebar():
         display_name = "Member"
 
     with st.sidebar:
-        # --- 3. CENTERED LOGO (Pulling from Bucket) ---
+        # --- LOGO SECTION ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
             try:
-                # This calls your Section 6 helper to download from Supabase Storage
-                logo_data = get_logo() 
+                logo_data = get_logo() # Calls helper in Section 6
                 if logo_data:
                     st.image(logo_data, width=80)
                 else:
@@ -871,17 +884,19 @@ def render_sidebar():
             except NameError:
                 st.warning("get_logo() missing")
 
-        # --- 4. CENTERED INFO BOX ---
+        # --- INFO BOX ---
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
-                        padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
+                        padding: 10px; border-radius: 10px; margin-top: 10px; 
+                        border: 1px solid rgba(255, 255, 255, 0.2);">
                 <span style="font-size: 14px; color: white;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
-                <small style="color: rgba(255,255,255,0.8);">{display_name} ({role})</small>
+                <small style="color: rgba(255, 255, 255, 0.8);">{display_name} ({role})</small>
             </div>
             """, 
             unsafe_allow_html=True
         )
+        st.write("---")
         
         st.write("---")
 # ==============================
