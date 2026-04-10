@@ -267,47 +267,26 @@ from datetime import datetime, timedelta
 
 SESSION_TIMEOUT = 15  # Minutes
 
-# ==========================================
-# UI CONFIGURATION (BULLETPROOF VERSION)
-# ==========================================
-
-def apply_ui_theme():
-    """
-    Applies the UI theme and FORCES visibility of login labels.
-    """
-    # Fallback to a default color if session_state isn't ready
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    
-    st.markdown(f"""
-    <style>
-        /* 1. THE SIDEBAR (Isolated) */
-        [data-testid="stSidebar"] {{
-            background-color: {brand_color} !important;
-        }}
-        [data-testid="stSidebar"] * {{
-            color: white !important;
-        }}
-
-        /* 2. THE MAIN CONTENT (FORCED DARK TEXT) */
-        /* Targets labels and inputs specifically on the login/main screen */
-        .main [data-testid="stWidgetLabel"] p {{
-            color: #002D62 !important; 
-            font-weight: bold !important;
-            opacity: 1 !important;
-        }}
+# --- GLOBAL UI SYNC ---
+def sync_tenant_ui():
+    """Applies branding globally based on the logged-in tenant."""
+    if 'tenant_id' in st.session_state:
+        # Fetch fresh branding from the database
+        res = supabase.table("tenants").select("brand_color, logo_url").eq("id", st.session_state.tenant_id).execute()
         
-        .main input {{
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-        }}
+        if res.data:
+            branding = res.data[0]
+            # Priority 1: Session state (instant feedback during Save)
+            # Priority 2: Database (saved preference)
+            color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
+            
+            # Use your original theme function
+            apply_custom_theme(color)
+            return branding
+    return None
 
-        /* 3. APP BACKGROUND */
-        .stApp {{
-            background-color: #F0F8FF !important;
-        }}
-    </style>
-    """, unsafe_allow_html=True)
-
+# Call this at the start of your main script execution
+active_branding = sync_tenant_ui()
 # ==========================================
 # PASSWORD VERIFICATION (LEGACY SUPPORT)
 # ==========================================
@@ -2350,6 +2329,9 @@ def show_ledger():
 import streamlit as st
 import time
 
+import streamlit as st
+import time
+
 # ==========================================
 # 23. SETTINGS & BRANDING PAGE (FULLY SYNCED)
 # ==========================================
@@ -2364,6 +2346,11 @@ def show_settings():
     # 1. FETCH OR INITIALIZE TENANT INFO
     try:
         tenant_id = st.session_state.get("tenant_id")
+        # Ensure we have a tenant_id to work with
+        if not tenant_id:
+            st.warning("⚠️ No active tenant detected. Please log in.")
+            return
+
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         
         if not tenant_resp.data:
@@ -2394,7 +2381,8 @@ def show_settings():
         st.markdown(f"**Current Business Name:** {biz_name}")
         st.markdown(f"**Company Code:** `{biz_code}`")
         
-        current_brand_color = active_company.get('brand_color', '#2B3F87')
+        # Use session state for current_brand_color so the picker updates instantly
+        current_brand_color = st.session_state.get('theme_color', active_company.get('brand_color', '#2B3F87'))
         new_color = st.color_picker("🎨 Change Brand Color", current_brand_color)
         
         st.markdown("**Preview:**")
@@ -2409,7 +2397,8 @@ def show_settings():
         st.markdown("**Company Logo:**")
         
         try:
-            # Assumes get_logo() is defined globally elsewhere in your app
+            # Assumes get_logo() exists and uses the cache-busting logic:
+            # f"{public_url}?t={int(time.time())}"
             logo_data = get_logo()
             if logo_data:
                 st.image(logo_data, use_container_width=True, caption="Current Logo")
@@ -2423,19 +2412,16 @@ def show_settings():
     st.write("---")
 
     # --- SAVE BUTTON SECTION ---
-    # This must be inside show_settings() to access logo_file and new_color
     if st.button("💾 Save Branding Changes", use_container_width=True):
         updated_data = {"brand_color": new_color}
         
-        # 1. Update session state immediately so the sidebar color changes on rerun
-        st.session_state.theme_color = new_color
-        
-        # 2. Handle logo upload
+        # 1. Handle logo upload
         if logo_file:
             try:
                 bucket_name = 'company-logos'
                 file_ext = logo_file.name.split('.')[-1].lower()
-                file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
+                # Force standardized filename for the tenant
+                file_path = f"{tenant_id}_logo.{file_ext}"
                 
                 # UPLOAD TO STORAGE
                 supabase.storage.from_(bucket_name).upload(
@@ -2446,8 +2432,6 @@ def show_settings():
                         "content-type": f"image/{file_ext}"
                     }
                 )
-                
-                # Store path for database update
                 updated_data["logo_url"] = file_path
                 
             except Exception as e:
@@ -2462,19 +2446,21 @@ def show_settings():
                     st.error(f"❌ Storage Error: {str(e)}")
                     st.stop()
 
-        # 3. UPDATE DATABASE
+        # 2. UPDATE DATABASE
         try:
             supabase.table("tenants")\
                 .update(updated_data)\
-                .eq("id", st.session_state.tenant_id)\
+                .eq("id", tenant_id)\
                 .execute()
             
-            st.success("🎉 Branding saved successfully!")
+            # 3. THE HANDSHAKE: Update session state immediately
+            st.session_state.theme_color = new_color
             
             # 4. REFRESH UI
-            # Clear cache and rerun to trigger new Sidebar CSS and Logo
-            st.cache_data.clear()
-            st.rerun()
+            st.cache_data.clear() # Clears any cached database queries
+            st.success("🎉 Branding saved successfully! Syncing UI...")
+            time.sleep(1) # Brief pause so the user sees the success message
+            st.rerun() # Triggers global theme application in app.py
             
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
