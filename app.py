@@ -410,69 +410,49 @@ def log_event(supabase, user_id, event, status, meta=None):
 # 9. CORE AUTHENTICATION LOGIC (VERIFIED)
 # ==========================================
 
-def authenticate(supabase, company_slug, email, password):
-    # 1. Rate limit check
-    if not check_rate_limit(email):
-        return {"error": "Too many attempts. Try again later."}
-
+def authenticate(supabase, company_code, email, password):
     try:
-        # 2. Tenant lookup
-        tenant_res = (
-            supabase.table("tenants")
-            .select("id, name")
-            .eq("name", company_slug)
-            .limit(1)
-            .execute()
-        )
+        # 1. Sign in with Supabase Auth
+        res = supabase.auth.sign_in_with_password({
+            "email": email.strip(), # Clean email
+            "password": password
+        })
+        
+        if res.user:
+            # 2. Fetch the user's tenant link
+            response = supabase.table("users") \
+                .select("tenant_id, tenants(company_code)") \
+                .eq("id", res.user.id) \
+                .execute()
+            
+            if not response.data:
+                return {"success": False, "error": "User profile not found."}
 
-        if not tenant_res.data:
-            record_failed_attempt(email)
-            return {"error": "Invalid Company/Organization name."}
+            user_record = response.data[0]
+            tenant_info = user_record.get('tenants')
+            
+            if not tenant_info:
+                return {"success": False, "error": "User is not linked to any company."}
 
-        tenant = tenant_res.data[0]
-
-        # 3. Supabase Auth logic
-        try:
-            auth_res = supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
-        except Exception:
-            record_failed_attempt(email)
-            return {"error": "Invalid email or password."}
-
-        if not auth_res.user:
-            record_failed_attempt(email)
-            return {"error": "Authentication failed."}
-
-        user_id = auth_res.user.id
-
-        # 4. Verify user belongs to tenant + get role
-        user_res = (
-            supabase.table("users")
-            .select("id, tenant_id, role")
-            .eq("id", user_id)
-            .eq("tenant_id", tenant["id"])
-            .limit(1)
-            .execute()
-        )
-
-        if not user_res.data:
-            record_failed_attempt(email)
-            return {"error": "Access denied for this organization."}
-
-        user = user_res.data[0]
-        reset_attempts(email)
-
-        return {
-            "user_id": user_id,
-            "tenant_id": tenant["id"],
-            "role": user.get("role", "Admin"),
-            "company": tenant["name"]
-        }
-
+            # 3. CLEAN COMPARISON
+            # .strip() removes accidental spaces; .upper() ignores capitalization
+            db_code = str(tenant_info.get('company_code', '')).strip().upper()
+            input_code = str(company_code).strip().upper()
+            
+            if db_code == input_code:
+                return {
+                    "success": True, 
+                    "user": res.user, 
+                    "tenant_id": user_record['tenant_id']
+                }
+            else:
+                # Debugging tip: This tells you exactly what the DB expected vs what you gave
+                return {"success": False, "error": f"Invalid Company Code. (Received: {input_code})"}
+        
     except Exception as e:
-        return {"error": f"Login failed: {str(e)}"}
+        return {"success": False, "error": str(e)}
+
+    return {"success": False, "error": "Authentication failed."}
 
 # ==========================================
 # 10. SESSION & RBAC MANAGEMENT
