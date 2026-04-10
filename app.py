@@ -2347,6 +2347,9 @@ def show_ledger():
         st.components.v1.html(html_statement, height=600, scrolling=True)
 
 
+import streamlit as st
+import time
+
 # ==========================================
 # 23. SETTINGS & BRANDING PAGE (FULLY SYNCED)
 # ==========================================
@@ -2406,6 +2409,7 @@ def show_settings():
         st.markdown("**Company Logo:**")
         
         try:
+            # Assumes get_logo() is defined globally elsewhere in your app
             logo_data = get_logo()
             if logo_data:
                 st.image(logo_data, use_container_width=True, caption="Current Logo")
@@ -2416,66 +2420,64 @@ def show_settings():
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-    # --- SAVE BUTTON ---
-if st.button("💾 Save Branding Changes", use_container_width=True):
-    # Everything below is indented because it only runs if the button is clicked
-    updated_data = {"brand_color": new_color}
-    
-    # 1. Update session state immediately so the sidebar color changes on rerun
-    st.session_state.theme_color = new_color
-    
-    # 2. Handle logo upload
-    if logo_file:
+    st.write("---")
+
+    # --- SAVE BUTTON SECTION ---
+    # This must be inside show_settings() to access logo_file and new_color
+    if st.button("💾 Save Branding Changes", use_container_width=True):
+        updated_data = {"brand_color": new_color}
+        
+        # 1. Update session state immediately so the sidebar color changes on rerun
+        st.session_state.theme_color = new_color
+        
+        # 2. Handle logo upload
+        if logo_file:
+            try:
+                bucket_name = 'company-logos'
+                file_ext = logo_file.name.split('.')[-1].lower()
+                file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
+                
+                # UPLOAD TO STORAGE
+                supabase.storage.from_(bucket_name).upload(
+                    path=file_path,
+                    file=logo_file.getvalue(),
+                    file_options={
+                        "x-upsert": "true",
+                        "content-type": f"image/{file_ext}"
+                    }
+                )
+                
+                # Store path for database update
+                updated_data["logo_url"] = file_path
+                
+            except Exception as e:
+                # Fallback: if upload fails, try 'update'
+                try:
+                    supabase.storage.from_(bucket_name).update(
+                        path=file_path,
+                        file=logo_file.getvalue()
+                    )
+                    updated_data["logo_url"] = file_path
+                except:
+                    st.error(f"❌ Storage Error: {str(e)}")
+                    st.stop()
+
+        # 3. UPDATE DATABASE
         try:
-            bucket_name = 'company-logos'
-            file_ext = logo_file.name.split('.')[-1].lower()
-            file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
+            supabase.table("tenants")\
+                .update(updated_data)\
+                .eq("id", st.session_state.tenant_id)\
+                .execute()
             
-            # UPLOAD TO STORAGE
-            supabase.storage.from_(bucket_name).upload(
-                path=file_path,
-                file=logo_file.getvalue(),
-                file_options={
-                    "x-upsert": "true",
-                    "content-type": f"image/{file_ext}"
-                }
-            )
+            st.success("🎉 Branding saved successfully!")
             
-            # Store path for database update
-            updated_data["logo_url"] = file_path
+            # 4. REFRESH UI
+            # Clear cache and rerun to trigger new Sidebar CSS and Logo
+            st.cache_data.clear()
+            st.rerun()
             
         except Exception as e:
-            # Fallback: if upload fails, try 'update'
-            try:
-                supabase.storage.from_(bucket_name).update(
-                    path=file_path,
-                    file=logo_file.getvalue()
-                )
-                updated_data["logo_url"] = file_path
-            except:
-                st.error(f"❌ Storage Error: {str(e)}")
-                # Use 'return' here to stop execution if the upload failed completely
-                st.stop()
-
-    # 3. UPDATE DATABASE
-    try:
-        supabase.table("tenants")\
-            .update(updated_data)\
-            .eq("id", st.session_state.tenant_id)\
-            .execute()
-        
-        st.success("🎉 Branding saved successfully!")
-        
-        # 4. REFRESH UI
-        # Clear cache and rerun to trigger new Sidebar CSS and Logo
-        st.cache_data.clear()
-        st.rerun()
-        
-    except Exception as e:
-        st.error(f"❌ Database Error: {str(e)}")
-import streamlit as st
-import time
-
+            st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Define these first!)
 # ==========================================
