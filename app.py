@@ -876,15 +876,24 @@ def main():
     # 1. Initialize session state
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
-    if "view" not in st.session_state:
-        st.session_state.view = "login"
+    # Initialize view
+if "view" not in st.session_state:
+    st.session_state.view = "login"
 
-    # 2. THE ROUTER
-    if not st.session_state.logged_in:
-        run_auth_ui(supabase)
-    else:
-        # This calls the "Big" dashboard logic at the bottom of your script
-        show_dashboard()
+# ROUTER
+if st.session_state.view == "login":
+    login_page(supabase)
+
+elif st.session_state.view == "signup":
+    signup_page(supabase)
+
+elif st.session_state.view == "dashboard":
+    st.write("✅ Welcome to Dashboard")  # TEMP TEST
+    # Replace with your real dashboard function
+    # show_dashboard()
+    
+elif st.session_state.view == "reset":
+    reset_password_ui(supabase)
 
 # ==============================
 # 10. THE SIDEBAR NAVIGATION
