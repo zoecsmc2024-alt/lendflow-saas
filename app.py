@@ -226,21 +226,35 @@ def save_data(table_name, dataframe):
         return False
 
 # ==========================================
-# 7. SECURITY & SESSION MANAGEMENT
+# 7. SECURITY & SESSION MANAGEMENT (STYLING FIX)
 # ==========================================
-from datetime import datetime, timedelta  # Added timedelta for timeout logic
+from datetime import datetime, timedelta
 
 SESSION_TIMEOUT = 15  # Minutes
 
-# --- ADDITIONAL UI STYLING (Buttons + Checkbox) ---
+# --- ADDITIONAL UI STYLING (Fixed for visibility) ---
 st.markdown("""
 <style>
-/* Main buttons */
+/* 1. FORCE GLOBAL TEXT VISIBILITY ON MAIN PAGE */
+/* This ensures that even if other styles turn things white, the main app stays dark */
+[data-testid="stAppViewContainer"] {
+    color: #1E3A8A !important;
+}
+
+/* 2. FIX INPUT BOXES (Login Fields) */
+/* This is the most important fix for your "Invisible Words" */
+input {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+}
+
+/* 3. BUTTON STYLING */
 div.stButton > button {
     height: 42px;
     padding: 0 18px;
     font-size: 14px;
     border-radius: 8px;
+    color: #1E3A8A !important; /* Ensure button text isn't white */
 }
 
 /* Small secondary buttons */
@@ -250,24 +264,16 @@ div.stButton > button {
     padding: 0 12px !important;
     border-radius: 6px !important;
     background-color: #f0f2f6;
-    color: #333;
+    color: #333 !important;
     border: 1px solid #ddd;
 }
 
-/* Center helper */
-.center-btn {
-    display: flex;
-    justify-content: center;
-    margin-top: 5px;
-}
-
-/* Spacing */
+/* 4. LAYOUT SPACING */
 .block-container {
     padding-top: 2rem;
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ==========================================
 # PASSWORD VERIFICATION (LEGACY SUPPORT)
