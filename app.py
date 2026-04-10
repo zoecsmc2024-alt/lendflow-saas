@@ -2280,13 +2280,14 @@ def show_settings():
     
     # 1. FETCH OR INITIALIZE TENANT INFO
     try:
+        tenant_id = st.session_state.get("tenant_id")
         # We use .execute() and check data to prevent the 'single()' empty result crash
-        tenant_resp = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).execute()
+        tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         
         if not tenant_resp.data:
             # If no record exists in your table yet, we create one so the page isn't blank
             new_tenant = {
-                "id": st.session_state.tenant_id,
+                "id": tenant_id,
                 "name": "Zoe Consults Client",
                 "company_code": "NEW_USER",
                 "brand_color": "#2B3F87",
@@ -2327,12 +2328,17 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        current_logo = active_company.get('logo_url')
         
-        if current_logo:
-            st.image(current_logo, use_container_width=True, caption="Current Logo")
-        else:
-            st.caption("No logo uploaded yet.")
+        # We use the get_logo() helper to pull from the BUCKET for the preview
+        try:
+            logo_data = get_logo()
+            if logo_data:
+                st.image(logo_data, use_container_width=True, caption="Current Logo")
+            else:
+                st.caption("No logo uploaded yet.")
+        except NameError:
+            # Fallback if get_logo isn't defined yet
+            st.caption("Logo helper not found.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
@@ -2348,7 +2354,7 @@ def show_settings():
                 # Path: USER_ID_logo.png
                 file_path = f"{st.session_state.tenant_id}_logo.png"
                 
-                # UPLOAD TO STORAGE
+                # UPLOAD TO STORAGE (Direct Bucket Access)
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
