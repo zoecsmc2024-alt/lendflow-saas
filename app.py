@@ -2554,7 +2554,7 @@ def show_dashboard_view():
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# FINAL APP ROUTER (ALL MODULES MAPPED)
+# FINAL APP ROUTER (SYNCED TO YOUR DEFS)
 # ==========================================
 if __name__ == "__main__":
     apply_ui_theme() 
@@ -2565,48 +2565,53 @@ if __name__ == "__main__":
         check_session_timeout()
         render_sidebar()
         
-        # This captures the exact string from your radio menu
         page = show_sidebar_menu()
         
-        # --- ROUTING TABLE ---
-        if page == "Overview":
-            show_dashboard_view()
-            
-        elif page == "Loans":
-            show_loans_page() 
-            
-        elif page == "Borrowers":
-            show_borrowers_page()
+        try:
+            if page == "Overview":
+                show_dashboard_view()
+                
+            elif page == "Loans":
+                # Matches your 'def show_loans' exactly!
+                show_loans() 
+                
+            elif page == "Borrowers":
+                show_borrowers()
 
-        elif page == "Collateral":
-            show_collateral_page()
+            elif page == "Collateral":
+                show_collateral()
 
-        elif page == "Calendar":
-            show_calendar_page()
+            elif page == "Calendar":
+                show_calendar()
 
-        elif page == "Ledger":
-            show_ledger_page()
+            elif page == "Ledger":
+                show_ledger()
 
-        elif page == "Overdue Tracker":
-            show_overdue_tracker_page()
+            elif page == "Overdue Tracker":
+                show_overdue_tracker()
 
-        elif page == "Payments":
-            show_payments_page()
-            
-        elif page == "Expenses":
-            show_expenses_page()
-            
-        elif page == "PettyCash":
-            show_petty_cash_page()
-            
-        elif page == "Payroll":
-            show_payroll_page()
+            elif page == "Payments":
+                show_payments()
+                
+            elif page == "Expenses":
+                show_expenses()
+                
+            elif page == "PettyCash":
+                show_petty_cash()
+                
+            elif page == "Payroll":
+                show_payroll()
 
-        elif page == "Reports":
-            show_reports_page()
-            
-        elif page == "Settings":
-            show_settings_page()
-            
-        else:
-            st.warning(f"Module '{page}' is defined in the menu but the function call is missing in the router.")
+            elif page == "Reports":
+                show_reports()
+                
+            elif page == "Settings":
+                show_settings()
+                
+            else:
+                st.info(f"The {page} module is coming online soon.")
+
+        except NameError as e:
+            st.error(f"🚨 **Mapping Error!**")
+            st.warning(f"Python is looking for a function that isn't named correctly: {e}")
+            st.info("Double-check that your 'def' name matches the one in this list!")
