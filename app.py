@@ -465,6 +465,33 @@ def reset_password_ui(supabase):
         except Exception:
             st.error("Failed to send reset email")
 
+def authenticate(supabase, company_code, email, password):
+    try:
+        # 1. Sign in with Supabase Auth
+        res = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+        
+        if res.user:
+            # 2. Verify they belong to the correct company (tenant)
+            user_query = supabase.table("users").select("tenant_id, tenants(company_code)").eq("id", res.user.id).single().execute()
+            
+            if user_query.data:
+                db_company_code = user_query.data['tenants']['company_code']
+                
+                if db_company_code.upper() == company_code.upper():
+                    return {"success": True, "user": res.user, "tenant_id": user_query.data['tenant_id']}
+                else:
+                    return {"success": False, "error": "Invalid Company Code for this user."}
+            else:
+                return {"success": False, "error": "User profile not found."}
+                
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
+    return {"success": False, "error": "Authentication failed."}
+
 
 def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
