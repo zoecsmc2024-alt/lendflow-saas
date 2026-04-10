@@ -813,7 +813,7 @@ def save_logo_to_db(image_file):
 # ==========================================
 
 def render_sidebar():
-    """Handles tenant branding and user info display."""
+    """Handles tenant branding and user info display with dynamic CSS."""
     # 1. AUTH & SESSION CHECKS
     role = st.session_state.get("role", "Staff")
     tenant_id = st.session_state.get("tenant_id")
@@ -822,9 +822,32 @@ def render_sidebar():
     # --- FETCH TENANT DATA (Fixes NameError: active_company) ---
     try:
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
-        active_company = tenant_resp.data[0] if tenant_resp.data else {"name": "Zoe Consults"}
+        if tenant_resp.data:
+            active_company = tenant_resp.data[0]
+            brand_color = active_company.get('brand_color', '#2B3F87') # Default Zoe Blue
+        else:
+            active_company = {"name": "Zoe Consults"}
+            brand_color = '#2B3F87'
     except Exception:
         active_company = {"name": "Zoe Consults"}
+        brand_color = '#2B3F87'
+
+    # --- 2. DYNAMIC THEME INJECTION (Fixes Sidebar Theme) ---
+    st.markdown(f"""
+        <style>
+            [data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
+            /* Forces all text in sidebar to white for readability against brand colors */
+            [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] h3 {{
+                color: white !important;
+            }}
+            /* Fixes the radio button text color specifically */
+            [data-testid="stWidgetLabel"] p {{
+                color: white !important;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
 
     # --- DYNAMIC USER EXTRACTION ---
     if hasattr(user_obj, 'email'):
@@ -835,11 +858,11 @@ def render_sidebar():
         display_name = "Member"
 
     with st.sidebar:
-        # --- 2. CENTERED LOGO ---
+        # --- 3. CENTERED LOGO (Pulling from Bucket) ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            # IMPORTANT: Ensure 'def get_logo():' is written ABOVE this function in your file!
             try:
+                # This calls your Section 6 helper to download from Supabase Storage
                 logo_data = get_logo() 
                 if logo_data:
                     st.image(logo_data, width=80)
@@ -848,20 +871,19 @@ def render_sidebar():
             except NameError:
                 st.warning("get_logo() missing")
 
-        # --- 3. CENTERED INFO BOX ---
+        # --- 4. CENTERED INFO BOX ---
         st.markdown(
             f"""
-            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
-                        padding: 10px; border-radius: 10px; margin-top: 10px;">
-                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
-                <small style="color: #888;">{display_name} ({role})</small>
+            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
+                        padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 14px; color: white;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
+                <small style="color: rgba(255,255,255,0.8);">{display_name} ({role})</small>
             </div>
             """, 
             unsafe_allow_html=True
         )
         
         st.write("---")
-
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
