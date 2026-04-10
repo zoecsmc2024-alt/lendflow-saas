@@ -19,7 +19,39 @@ import pandas as pd
 import base64
 from datetime import datetime
 from supabase import create_client
+import streamlit as st
+import pandas as pd
+# ... (all your other imports)
 
+# ==========================================
+# 1. THEME DEFINITION (MUST BE AT THE TOP)
+# ==========================================
+def apply_ui_theme():
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"""
+    <style>
+        /* Sidebar styling */
+        [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
+        [data-testid="stSidebar"] * {{ color: white !important; }}
+
+        /* FORCING LOGIN LABELS TO BE DARK BLUE */
+        .main [data-testid="stWidgetLabel"] p {{
+            color: #002D62 !important; 
+            font-weight: bold !important;
+            opacity: 1 !important;
+        }}
+        
+        /* FORCING INPUT TEXT TO BE BLACK */
+        .main input {{
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+        }}
+
+        .stApp {{ background-color: #F0F8FF !important; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# NOW your script can safely continue...
 # ==========================================
 # 1. SUPABASE CONNECTION
 # ==========================================
