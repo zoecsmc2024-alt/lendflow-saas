@@ -526,6 +526,7 @@ def login_page(supabase):
                 auth_result = authenticate(supabase, company, email, password)
                 
                 if auth_result.get("success"):
+                    st.session_state.logged_in = True
                     # ✅ SAVE SESSION (CRITICAL FIX)
                     st.session_state.user = auth_result.get("user")
                     st.session_state.session = auth_result.get("session")
