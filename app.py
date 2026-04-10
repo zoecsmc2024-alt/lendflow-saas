@@ -861,7 +861,32 @@ def save_logo_to_db(image_file):
     except Exception as e:
         st.error(f"❌ Logo Save Error: {e}")
         return False
+def main():
+    # 1. Initialize session state variables if they don't exist
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "view" not in st.session_state:
+        st.session_state.view = "login"
 
+    # 2. THE ROUTER LOGIC
+    if not st.session_state.logged_in:
+        # Show Login or Signup UI
+        run_auth_ui(supabase)
+    else:
+        # SHOW THE DASHBOARD!
+        show_dashboard() 
+
+def show_dashboard():
+    st.title(f"🚀 Zoe Consults Dashboard")
+    st.write(f"Welcome back, {st.session_state.get('user_email', 'User')}!")
+    st.info(f"Connected to Company: {st.session_state.get('company_code', 'Unknown')}")
+    
+    if st.button("Log Out"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+if __name__ == "__main__":
+    main()
 
 
 # ==============================
