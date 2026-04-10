@@ -2373,25 +2373,28 @@ def show_settings():
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                # Path: USER_ID_logo.png
-                file_path = f"{st.session_state.tenant_id}_logo.png"
                 
-                # UPLOAD TO STORAGE (Direct Bucket Access)
+                # 1. Clean extension handling (prevents .png.jpeg issues)
+                file_ext = logo_file.name.split('.')[-1].lower()
+                file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
+                
+                # 2. UPLOAD TO STORAGE (Direct Bucket Access)
+                # We use file_ext to dynamically set the content-type
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": "image/png"
+                        "content-type": f"image/{file_ext}"
                     }
                 )
                 
-                # Save the PATH to the database
+                # 3. Save the PATH to the database
                 updated_data["logo_url"] = file_path
                 
             except Exception as e:
                 st.error(f"❌ Storage Error: {str(e)}")
-                st.info("Check if your 'company-logos' bucket is created!")
+                st.info("Ensure the 'company-logos' bucket exists and RLS policies allow uploads!")
                 return # Stop if upload fails
         
         # Update the database record
@@ -2399,6 +2402,8 @@ def show_settings():
             supabase.table("tenants").update(updated_data).eq("id", st.session_state.tenant_id).execute()
             
             st.success("✅ Branding updated successfully!")
+            
+            # 4. Clear cache and rerun to trigger the new CSS and Logo
             st.cache_data.clear()
             st.rerun()
             
