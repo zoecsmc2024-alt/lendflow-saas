@@ -185,31 +185,20 @@ import pandas as pd
 from fpdf import FPDF
 
 def get_logo():
-    """
-    Downloads the logo bytes from Supabase bucket and converts to Base64.
-    Matches your 'tenants' table and 'company-logos' bucket.
-    """
-    try:
-        tenant_id = st.session_state.get("tenant_id")
-        if not tenant_id:
-            return None
-            
-        # 1. Fetch the file path from the tenants table
-        res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
-        
-        if res.data and res.data[0].get("logo_url"):
-            file_path = res.data[0]["logo_url"]
-            
-            # 2. Download directly from your 'company-logos' bucket
-            file_data = supabase.storage.from_('company-logos').download(file_path)
-            
-            # 3. Convert to Base64 for the sidebar HTML
-            b64 = base64.b64encode(file_data).decode()
-            return f"data:image/png;base64,{b64}"
-    except Exception:
-        # If bucket is empty or file missing, return None to show the fallback emoji
+    """Fetches the tenant logo from Supabase with a cache-busting parameter."""
+    tenant_id = st.session_state.get('tenant_id')
+    if not tenant_id:
         return None
-    return None
+    
+    try:
+        # Get the public URL from your 'logos' bucket
+        res = supabase.storage.from_('logos').get_public_url(f"{tenant_id}/logo.png")
+        
+        # Add a timestamp to the URL to force an image refresh
+        import time
+        return f"{res}?t={int(time.time())}"
+    except:
+        return None
 
 def create_pdf_report(title, content_list):
     """
@@ -895,76 +884,43 @@ def get_logo():
 # ==========================================
 
 def render_sidebar():
-    """
-    Handles tenant branding, CSS isolation, and navigation header.
-    Reactive to session state changes to prevent needing a refresh.
-    """
-    # 1. FETCH THE THEME DATA
+    # 1. Get the latest branding info
     theme_data = get_current_theme()
     
-    # Priority: Session State (for instant update) > Database > Default Blue
+    # Check session state first (instant feedback), then theme_data, then default
     brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#2B3F87'))
-    company_name = theme_data.get('name', 'Zoe Consults')
+    company_name = theme_data.get('name', 'Super admin')
     
-    # 2. INJECT DYNAMIC THEME CSS
-    # This logic keeps the sidebar white-on-color and the main page dark-on-light
+    # 2. Apply the CSS
     st.markdown(f"""
         <style>
-            /* SIDEBAR: Force branding colors */
             section[data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            
-            /* Target all text elements inside the sidebar for white color */
-            section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-            section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-            section[data-testid="stSidebar"] span,
-            section[data-testid="stSidebar"] h1,
-            section[data-testid="stSidebar"] h2 {{
+            section[data-testid="stSidebar"] * {{
                 color: white !important;
             }}
-
-            /* MAIN BODY: Force visibility for login labels and inputs */
-            [data-testid="stAppViewContainer"] section.main [data-testid="stWidgetLabel"] p {{
-                color: #002D62 !important; /* Navy blue labels */
-                font-weight: bold !important;
-            }}
-
-            [data-testid="stAppViewContainer"] section.main input {{
-                color: #000000 !important; /* Black typing text */
-                -webkit-text-fill-color: #000000 !important;
-            }}
-
-            /* APP BACKGROUND */
-            .stApp {{
-                background-color: #F0F8FF !important;
-            }}
+            /* Safety: Keep main page inputs dark */
+            .main [data-testid="stWidgetLabel"] p {{ color: #002D62 !important; }}
         </style>
     """, unsafe_allow_html=True)
 
-    # 3. RENDER SIDEBAR CONTENT
     with st.sidebar:
-        # --- LOGO SECTION ---
-        _, col_mid, _ = st.columns([1, 2, 1])
-        with col_mid:
-            logo_data = get_logo()  # Fetches from Supabase bucket
-            if logo_data:
-                st.image(logo_data, width=80)
-            else:
-                # Fallback icon if no logo exists
-                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
+        # Render Logo
+        logo_url = get_logo()
+        if logo_url:
+            st.image(logo_url, width=100)
+        else:
+            st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
-        # --- TENANT INFO BOX ---
-        st.markdown(
-            f"""
-            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
-                        padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
-                <span style="font-size: 14px;">📍 <b>{company_name}</b></span><br>
-                <small style="opacity: 0.8;">{st.session_state.get('user_email', 'User')}</small>
+        # Tenant Info
+        st.markdown(f"""
+            <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                <b>{company_name}</b><br>
+                <small>{st.session_state.get('user_email', '')}</small>
             </div>
-            """, 
-            unsafe_allow_html=True
-        )
+        """, unsafe_allow_html=True)
+        st.divider()
         
         st.write("---")
 
