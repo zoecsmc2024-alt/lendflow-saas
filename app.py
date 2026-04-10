@@ -936,39 +936,42 @@ def render_sidebar():
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        # --- 2. CENTERED LOGO ---
+    # --- 1. PROJECT SELECTION (Must be first to define active_company) ---
+    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
+    active_company = company_list[active_company_name]
+    apply_custom_theme(active_company['brand_color'])
+
+    # --- 2. CENTERED LOGO ---
+    # This is now correctly inside the sidebar block
     _, col_mid, _ = st.columns([1, 2, 1])
     with col_mid:
         logo_data = active_company.get('logo_url')
         
         if logo_data:
-            # Check if it's already a full URL or just a filename
             if logo_data.startswith("http"):
                 final_logo_url = logo_data
             else:
-                # CONSTRUCT THE URL: Replace [PROJECT_REF] with your actual Supabase Project ID
-                # and ensure the path matches your folder structure (e.g., 'logos/')
+                # Replace with your actual project ID from Supabase
                 project_ref = "YOUR_PROJECT_ID_HERE" 
                 final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/logos/{logo_data}"
             
-            # Add a timestamp to bypass browser caching so it updates instantly
             import time
             st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
         else:
             st.write("🌍")
 
-        # 6. Centered Info Box
-        user_email = st.session_state.get('user_email', 'User')
-        st.markdown(f"""
-            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
-                <span style="font-size: 14px; font-weight: bold; color: white;">📍 {company_name}</span><br>
-                <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        st.write("") # Spacer
-        st.divider()
-
+    # --- 3. CENTERED INFO BOX ---
+    # Still inside the 'with st.sidebar:' block
+    user_email = st.session_state.get('user_email', 'User')
+    st.markdown(f"""
+        <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
+            <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
+            <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.write("") 
+    st.divider()
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
