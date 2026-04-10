@@ -475,22 +475,26 @@ def authenticate(supabase, company_code, email, password):
         
         if res.user:
             # 2. Verify they belong to the correct company (tenant)
-            user_query = supabase.table("users").select("tenant_id, tenants(company_code)").eq("id", res.user.id).single().execute()
+            response = supabase.table("users") \
+                .select("tenant_id, tenants(company_code)") \
+                .eq("id", res.user.id) \
+                .execute()
             
-            if user_query.data:
-                db_company_code = user_query.data['tenants']['company_code']
+            # Check if we actually got data back
+            if response.data and len(response.data) > 0:
+                user_record = response.data[0] # Get the first result
+                db_company_code = user_record['tenants']['company_code']
                 
                 if db_company_code.upper() == company_code.upper():
-                    return {"success": True, "user": res.user, "tenant_id": user_query.data['tenant_id']}
+                    return {
+                        "success": True, 
+                        "user": res.user, 
+                        "tenant_id": user_record['tenant_id']
+                    }
                 else:
-                    return {"success": False, "error": "Invalid Company Code for this user."}
+                    return {"success": False, "error": "Invalid Company Code for this account."}
             else:
-                return {"success": False, "error": "User profile not found."}
-                
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    
-    return {"success": False, "error": "Authentication failed."}
+                return {"success": False, "error": "No profile linked to this login."}
 
 
 def login_page(supabase):
