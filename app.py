@@ -871,9 +871,8 @@ def get_logo():
 def render_sidebar():
     # 1. Initialize variables
     theme_data = {}
-    company_name = "Super admin"
     
-    # 2. Fetch All Tenants (Fixes NameError: company_list is not defined)
+    # 2. Fetch All Tenants (Fixes NameError and handles multi-tenancy)
     try:
         # Fetching fresh tenant list for the selectbox
         tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
@@ -883,50 +882,68 @@ def render_sidebar():
         st.error(f"Error fetching tenants: {e}")
         tenant_map = {}
 
-    # 3. Fetch Branding for the current session tenant
-    tenant_id = st.session_state.get('tenant_id')
-    if tenant_id:
-        try:
-            res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).single().execute()
-            if res.data:
-                theme_data = res.data
-                company_name = theme_data.get('name', 'Super admin')
-        except Exception:
-            pass
-
-    # 4. REACTIVITY ENGINE
-    brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#1E3A8A'))
+    # 3. Handle Active Tenant Selection
+    # If a tenant is already selected in session state, we use that as the default
+    current_tenant_id = st.session_state.get('tenant_id')
     
-    # 5. Apply the CSS
+    # 4. REACTIVITY ENGINE: Determine which color to paint the UI
+    # Priority: Session State (instant updates) > Database > Default Navy
+    brand_color = st.session_state.get('theme_color', '#1E3A8A')
+
+    # 5. Apply the Dynamic CSS
     st.markdown(f"""
         <style>
-            [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
-            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
+            /* Sidebar background */
+            [data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
             
-            /* Center Radio Buttons */
+            /* White text for sidebar elements */
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
+                color: white !important;
+            }}
+
+            /* Center the Navigation Radio Buttons */
             [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
                 flex-direction: column; align-items: center; 
             }}
+            [data-testid="stSidebar"] div.row-widget.stRadio > div[role="radiogroup"] > label {{ 
+                justify-content: center; text-align: center; width: 100%; 
+            }}
+
+            /* Main Page Branding */
+            h1, h2, h3 {{ color: {brand_color} !important; }}
             
-            /* Metric Card Styling */
+            /* Metric Card Glow-up */
             div[data-testid="stMetric"] {{
                 background-color: white; padding: 15px; border-radius: 10px;
                 border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }}
             div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{ color: #31333F !important; }}
-
-            h1, h2, h3 {{ color: {brand_color} !important; }}
-            .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
         </style>
     """, unsafe_allow_html=True)
 
     # --- THE SIDEBAR RENDER ---
     with st.sidebar:
-        # --- 1. PROJECT SELECTION ---
+        # --- 1. TENANT SELECTION ---
         if tenant_map:
-            # Replaces the broken company_list.keys()
-            active_company_name = st.selectbox("Business Portal:", list(tenant_map.keys()))
+            # Find the index of the current tenant to keep the selectbox in sync
+            options = list(tenant_map.keys())
+            default_index = 0
+            if current_tenant_id:
+                for i, (name, data) in enumerate(tenant_map.items()):
+                    if data['id'] == current_tenant_id:
+                        default_index = i
+                        break
+            
+            active_company_name = st.selectbox("Business Portal:", options, index=default_index)
             active_company = tenant_map[active_company_name]
+            
+            # Sync the session state if the user changes the dropdown
+            if st.session_state.get('tenant_id') != active_company['id']:
+                st.session_state['tenant_id'] = active_company['id']
+                st.session_state['theme_color'] = active_company['brand_color']
+                st.rerun()
         else:
             st.warning("No tenants available.")
             return
@@ -940,11 +957,12 @@ def render_sidebar():
                 if logo_data.startswith("http"):
                     final_logo_url = logo_data
                 else:
-                    # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase reference
+                    # Replace with your actual project reference ID
                     project_ref = "YOUR_PROJECT_ID" 
                     final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{logo_data}"
                 
                 import time
+                # Cache busting helps see the new logo immediately after a successful upload
                 st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
             else:
                 st.write("🌍")
@@ -960,9 +978,9 @@ def render_sidebar():
         
         st.write("") 
         st.divider()
-        
+
         # --- 4. NAVIGATION MENU ---
-        # Add your st.radio navigation here
+        # Add your st.radio logic here for the actual app sections
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
