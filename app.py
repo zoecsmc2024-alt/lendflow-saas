@@ -936,14 +936,26 @@ def render_sidebar():
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        # 5. Centered Logo
-        _, col_mid, _ = st.columns([1, 2, 1])
-        with col_mid:
-            logo_url = get_logo()  # Ensure your get_logo() uses the timestamp ?t=
-            if logo_url:
-                st.image(logo_url, width=80)
+        # --- 2. CENTERED LOGO ---
+    _, col_mid, _ = st.columns([1, 2, 1])
+    with col_mid:
+        logo_data = active_company.get('logo_url')
+        
+        if logo_data:
+            # Check if it's already a full URL or just a filename
+            if logo_data.startswith("http"):
+                final_logo_url = logo_data
             else:
-                st.markdown("<h1 style='text-align: center; margin:0;'>🌍</h1>", unsafe_allow_html=True)
+                # CONSTRUCT THE URL: Replace [PROJECT_REF] with your actual Supabase Project ID
+                # and ensure the path matches your folder structure (e.g., 'logos/')
+                project_ref = "YOUR_PROJECT_ID_HERE" 
+                final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/logos/{logo_data}"
+            
+            # Add a timestamp to bypass browser caching so it updates instantly
+            import time
+            st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+        else:
+            st.write("🌍")
 
         # 6. Centered Info Box
         user_email = st.session_state.get('user_email', 'User')
