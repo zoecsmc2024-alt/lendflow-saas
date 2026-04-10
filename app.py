@@ -27,19 +27,19 @@ import streamlit as st
 import time
 
 def apply_custom_theme(color):
-    """Injects custom CSS to update the sidebar and UI color globally."""
     st.markdown(f"""
         <style>
-            section[data-testid="stSidebar"] {{
-                background-color: {color} !important;
-            }}
-            section[data-testid="stSidebar"] * {{
-                color: white !important;
-            }}
-            .stButton>button {{
-                border-color: {color};
-                color: {color};
-            }}
+        [data-testid="stSidebar"] {{ background-color: {color} !important; }}
+        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
+        
+        /* The old code's Metric Card "Glow-up" */
+        div[data-testid="stMetric"] {{
+            background-color: white; padding: 15px; border-radius: 10px;
+            border-left: 5px solid {color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        
+        /* Make the titles match the brand */
+        h1, h2, h3 {{ color: {color}; }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -869,19 +869,17 @@ def render_sidebar():
     theme_data = {}
     company_name = "Super admin"
     
-    # 2. Safely fetch branding info
+    # 2. Safely fetch branding info from 'tenants' (the new source of truth)
     try:
-        # Assumes get_current_theme() handles the 'if tenant_id' check internally
         theme_data = get_current_theme() or {}
         company_name = theme_data.get('name', 'Super admin')
-    except Exception as e:
-        # Fallback if DB query fails on initial load
+    except Exception:
         pass
     
-    # Priority: Session State (Instant) > Database > Default
-    brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#2B3F87'))
+    # Priority: Session State (Instant) > Database > Default Blue
+    brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#1E3A8A'))
     
-    # 3. Apply the CSS
+    # 3. Apply the CSS (Borrowing the Metric Glow-up from your old code)
     st.markdown(f"""
         <style>
             section[data-testid="stSidebar"] {{
@@ -890,48 +888,71 @@ def render_sidebar():
             section[data-testid="stSidebar"] * {{
                 color: white !important;
             }}
-            /* Keep main page inputs readable */
-            .main [data-testid="stWidgetLabel"] p {{ color: #002D62 !important; }}
+            /* Center the radio menu items */
+            div.row-widget.stRadio > div {{ flex-direction: column; align-items: center; }}
+            div.row-widget.stRadio > div[role="radiogroup"] > label {{ justify-content: center; text-align: center; width: 100%; }}
+
+            /* BORROWED: The Metric Card Glow-up */
+            div[data-testid="stMetric"] {{
+                background-color: white; padding: 15px; border-radius: 10px;
+                border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }}
+            
+            /* Keep main page input labels readable on white background */
+            .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
+            h1, h2, h3 {{ color: {brand_color}; }}
         </style>
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        # Render Logo with a fallback to a generic icon if the bucket fails
-        logo_url = get_logo()
-        if logo_url:
-            st.image(logo_url, width=100)
-        else:
-            st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
-        # 5. Tenant Info Section
+        # 4. BORROWED: Centered Logo Columns
+        _, col_mid, _ = st.columns([1, 2, 1])
+        with col_mid:
+            logo_url = get_logo()  # This now has the ?t= timestamp helper
+            if logo_url:
+                st.image(logo_url, width=80)
+            else:
+                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
+
+        # 5. Centered Info Box (Premium Look)
         user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
-            <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                <span style="font-size: 14px;">📍 <b>{company_name}</b></span><br>
-                <small style="opacity: 0.8;">{user_email}</small>
+            <div style="text-align: center; background: rgba(255,255,255,0.08); padding: 12px; border-radius: 12px; margin-top: 10px;">
+                <span style="font-size: 14px; font-weight: bold;">📍 {company_name}</span><br>
+                <small style="opacity: 0.7;">{user_email}</small>
             </div>
         """, unsafe_allow_html=True)
         
         st.divider()
-        # Navigation logic continues here...
 
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
-        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
+        "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
         "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
-        "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
+        "Overdue": "🚨", "Payments": "💰", "Settings": "⚙️"
     }
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
 
     with st.sidebar:
-        selection = st.radio("Main Menu", menu_options)
-        st.divider()
+        # Get the current index to keep the radio button sticky on rerun
+        current_page = st.session_state.get('current_page', "📈 Overview")
+        
+        # Determine the index for the radio button
+        try:
+            default_index = [m.split(" ", 1)[1] for m in menu_options].index(current_page.replace("📈 ", "").replace("⚙️ ", ""))
+        except:
+            default_index = 0
+
+        selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
+        
+        st.write("---")
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
     
-    # Return only the text part of the selection (e.g., "Settings")
-    return selection.split(" ", 1)[1] if " " in selection else selection
+    # Return clean string for the 'if page == "Settings":' logic
+    return selection.split(" ", 1)[1]
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
