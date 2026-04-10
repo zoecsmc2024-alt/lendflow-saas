@@ -848,59 +848,25 @@ def get_current_theme():
     """Always gets the latest saved color before drawing anything."""
     tenant_id = st.session_state.get("tenant_id")
     try:
-        # We fetch only the brand_color to keep it fast
-        res = supabase.table("tenants").select("brand_color").eq("id", tenant_id).execute()
+        res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).execute()
         if res.data:
-            return res.data[0].get('brand_color', '#2B3F87')
+            return res.data[0]
     except Exception:
         pass
-    return '#2B3F87' # Global fallback
+    return {'brand_color': '#2B3F87', 'name': 'Zoe Consults'}
 
 # --- 2. THE SIDEBAR RENDERER ---
 def render_sidebar():
-    # Fetch the color from the DB function above
-    brand_color = get_current_theme()
-    
-    # Apply CSS ONLY to the sidebar background
-    st.markdown(f"""
-        <style>
-            /* Force the sidebar to follow the DB color */
-            [data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
-            /* Ensure text stays white so it doesn't get lost */
-            [data-testid="stSidebar"] p, 
-            [data-testid="stSidebar"] span, 
-            [data-testid="stSidebar"] label {{
-                color: white !important;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # ... (Rest of your sidebar content)
-# --- 17. SIDEBAR & NAVIGATION ---
-
-def render_sidebar():
     """Handles tenant branding and user info display with dynamic CSS."""
     role = st.session_state.get("role", "Staff")
-    tenant_id = st.session_state.get("tenant_id")
     user_obj = st.session_state.get("user")
     
-    # 1. FETCH BRANDING DATA
-    try:
-        tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
-        if tenant_resp.data:
-            active_company = tenant_resp.data[0]
-            brand_color = active_company.get('brand_color', '#2B3F87')
-        else:
-            active_company = {"name": "Zoe Consults"}
-            brand_color = '#2B3F87'
-    except Exception:
-        active_company = {"name": "Zoe Consults"}
-        brand_color = '#2B3F87'
+    # FETCH DATA ONCE
+    theme_data = get_current_theme()
+    brand_color = theme_data.get('brand_color', '#2B3F87')
+    company_name = theme_data.get('name', 'Zoe Consults')
 
-    # 2. INJECT DYNAMIC THEME CSS
-    # This targets the sidebar background and forces text to white
+    # INJECT DYNAMIC THEME CSS (Only once!)
     st.markdown(f"""
         <style>
             [data-testid="stSidebar"] {{
@@ -915,27 +881,30 @@ def render_sidebar():
         </style>
     """, unsafe_allow_html=True)
 
-    # 3. SIDEBAR CONTENT
+    # USER DISPLAY LOGIC
+    display_name = user_obj.email if hasattr(user_obj, 'email') else "Member"
+
     with st.sidebar:
-        # LOGO
+        # LOGO SECTION
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            logo_data = get_logo()
+            logo_data = get_logo() # From your Section 6
             if logo_data:
                 st.image(logo_data, width=80)
             else:
                 st.write("🌍")
 
-        # TENANT INFO BOX
+        # INFO BOX
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
                         padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
-                <span style="font-size: 14px;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
-                <small style="opacity: 0.8;">{st.session_state.get('user_email', 'User')} ({role})</small>
+                <span style="font-size: 14px;">📍 <b>{company_name}</b></span><br>
+                <small style="opacity: 0.8;">{display_name} ({role})</small>
             </div>
             """, unsafe_allow_html=True
         )
+        st.write("---")
         st.write("---")
 
 def show_sidebar_menu():
