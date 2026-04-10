@@ -518,37 +518,47 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. TENANT LOGIC
+                # 1. TENANT
                 check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
                 if check.data:
                     tenant_id = check.data[0]['id']
                 else:
-                    new_t = supabase.table("tenants").insert({"company_code": tenant_code, "name": tenant_code.capitalize()}).execute()
+                    new_t = supabase.table("tenants").insert({
+                        "company_code": tenant_code,
+                        "name": tenant_code.capitalize()
+                    }).execute()
                     tenant_id = new_t.data[0]['id']
 
-                # 2. AUTH LOGIC
+                # 2. AUTH
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
-                    "options": {"data": {"tenant_id": str(tenant_id), "role": "Admin"}}
+                    "options": {
+                        "data": {
+                            "tenant_id": str(tenant_id),
+                            "role": "Admin"
+                        }
+                    }
                 })
 
-                # 3. PUBLIC PROFILE LOGIC
+                # 3. PROFILE INSERT
                 if res.user:
                     user_data = {
                         "id": res.user.id,
-                        "tenant_id": tenant_id,
+                        "tenant_id": str(tenant_id),  # ✅ FIXED
                         "role": "Admin",
                         "full_name": email.split('@')[0].capitalize()
                     }
-                    # We use 'execute()' to send it to the DB
-                    supabase.table("users").insert(user_data).execute()
-                    st.success("✅ SUCCESS! Account created. Check your email to confirm.")
+
+                    insert_res = supabase.table("users").insert(user_data).execute()
+                    print("INSERT RESPONSE:", insert_res)
+
+                    st.success("✅ SUCCESS! Account created. Check your email.")
+
                 else:
                     st.error("Auth failed: User object not returned.")
 
             except Exception as e:
-                # This will now print the EXACT error from Postgres
                 st.error(f"🚨 Detailed Error: {str(e)}")
 
     if st.button("⬅️ Back to Login"):
