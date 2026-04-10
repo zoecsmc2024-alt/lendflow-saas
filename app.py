@@ -872,38 +872,24 @@ def render_sidebar():
     # 1. Initialize variables
     theme_data = {}
     
-    # 2. Fetch All Tenants (Fixes NameError and handles multi-tenancy)
+    # 2. Fetch All Tenants
     try:
-        # Fetching fresh tenant list for the selectbox
         tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
-        # Create a dictionary: { "Company Name": {data_row} }
         tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
     except Exception as e:
         st.error(f"Error fetching tenants: {e}")
         tenant_map = {}
 
-    # 3. Handle Active Tenant Selection
     current_tenant_id = st.session_state.get('tenant_id')
-    
-    # 4. REACTIVITY ENGINE: Determine which color to paint the UI
     brand_color = st.session_state.get('theme_color', '#1E3A8A')
 
-    # 5. Apply the Dynamic CSS
+    # 3. Apply Dynamic CSS
     st.markdown(f"""
         <style>
-            [data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
-            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
-                color: white !important;
-            }}
-            /* Center the Navigation Radio Buttons */
-            [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
-                flex-direction: column; align-items: center; 
-            }}
-            /* Main Page Branding */
+            [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
+            [data-testid="stSidebarContent"] {{ padding-top: 1rem; }}
             h1, h2, h3 {{ color: {brand_color} !important; }}
-            /* Metric Card Glow-up */
             div[data-testid="stMetric"] {{
                 background-color: white; padding: 15px; border-radius: 10px;
                 border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
@@ -912,9 +898,9 @@ def render_sidebar():
         </style>
     """, unsafe_allow_html=True)
 
-    # --- THE SIDEBAR RENDER (Now properly indented inside the function) ---
+    # --- THE SIDEBAR RENDER ---
     with st.sidebar:
-        # --- 1. TENANT SELECTION ---
+        # 4. TENANT SELECTION (Fixed Indentation)
         if tenant_map:
             options = list(tenant_map.keys())
             default_index = 0
@@ -927,7 +913,6 @@ def render_sidebar():
             active_company_name = st.selectbox("Business Portal:", options, index=default_index)
             active_company = tenant_map[active_company_name]
             
-            # Sync the session state if the user changes the dropdown
             if st.session_state.get('tenant_id') != active_company['id']:
                 st.session_state['tenant_id'] = active_company['id']
                 st.session_state['theme_color'] = active_company['brand_color']
@@ -936,62 +921,64 @@ def render_sidebar():
             st.warning("No tenants available.")
             st.stop() 
 
-        # --- 2. CENTERED LOGO (FIXED) ---
-    _, col_mid, _ = st.columns([1, 2, 1])
-    with col_mid:
-        # Get the path from the database
-        logo_path = active_company.get('logo_url')
-        
-        if logo_path:
-            # 1. If it's already a full working URL (like your old code), use it directly
-            if str(logo_path).startswith("http"):
-                final_logo_url = logo_path
+        # 5. CENTERED LOGO & INFO (Fixed Indentation)
+        col_1, col_2, col_3 = st.columns([1, 2, 1])
+        with col_2:
+            logo_path = active_company.get('logo_url')
+            if logo_path:
+                if str(logo_path).startswith("http"):
+                    final_logo_url = logo_path
+                else:
+                    # REPLACE 'YOUR_PROJECT_ID' with your real Supabase ID
+                    project_ref = "YOUR_PROJECT_ID" 
+                    clean_path = logo_path if str(logo_path).startswith("logos/") else f"logos/{logo_path}"
+                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
+                
+                import time
+                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
             else:
-                # 2. If it's a relative path, construct the Supabase URL
-                # IMPORTANT: Replace 'YOUR_PROJECT_ID' with your actual Supabase reference
-                project_ref = "YOUR_PROJECT_ID" 
-                
-                # Ensure we have the 'logos/' folder prefix
-                clean_path = logo_path if str(logo_path).startswith("logos/") else f"logos/{logo_path}"
-                
-                final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
-            
-            # 3. Render the image with a cache-buster (?t=) 
-            # This forces the sidebar to stop showing the broken icon
-            import time
-            st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
-        else:
-            # Default fallback
-            st.write("🌍")
-        
-        # --- 3. CENTERED INFO BOX ---
+                st.markdown("<h1 style='text-align: center;'>🌍</h1>", unsafe_allow_html=True)
+
         user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
-            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
+            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin: 10px 0; border: 1px solid rgba(255,255,255,0.2);">
                 <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
                 <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
             </div>
         """, unsafe_allow_html=True)
         
-        st.write("") 
         st.divider()
+        
+        # 6. Call the menu inside the sidebar context
+        return show_sidebar_menu()
+
 def show_sidebar_menu():
-    """Displays the navigation radio and returns selection."""
+    """Displays the updated navigation menu."""
+    # Restored Payroll, Expenses, Petty Cash, etc.
     menu = {
-        "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
-        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
-        "Overdue": "🚨", "Payments": "💰", "Settings": "⚙️"
+        "Overview": "📈", 
+        "Loans": "💵", 
+        "Borrowers": "👥", 
+        "Collateral": "🛡️", 
+        "Calendar": "📅", 
+        "Ledger": "📄", 
+        "Payroll": "💳", 
+        "Expenses": "📉", 
+        "Petty Cash": "🪙", 
+        "Overdue Tracker": "🚨", 
+        "Payments": "💰", 
+        "Settings": "⚙️"
     }
+    
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
 
-    with st.sidebar:
-        # Navigation
-        selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
-        
-        st.divider()
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
+    # Navigation Selection
+    selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
+    
+    st.divider()
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
     
     # Return the clean text (e.g. "Overview")
     return selection.split(" ", 1)[1] if " " in selection else selection
