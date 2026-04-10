@@ -547,34 +547,29 @@ def signup_page(supabase):
                 })
 
                 # 3. CREATE PUBLIC PROFILE
-        if res.user:
-            try:
-                # We define the data clearly
-                user_profile = {
-                    "id": res.user.id,
-                    "tenant_id": tenant_id,
-                    "role": "Admin",
-                    "full_name": email.split('@')[0].capitalize()
-                }
-                
-                # Try to insert into the public.users table
-                profile_response = supabase.table("users").insert(user_profile).execute()
-                
-                if profile_response.data:
-                    st.success("✅ WE ARE IN! Account created. Check your email to confirm.")
+                if res.user:
+                    try:
+                        user_profile = {
+                            "id": res.user.id,
+                            "tenant_id": tenant_id,
+                            "role": "Admin",
+                            "full_name": email.split('@')[0].capitalize()
+                        }
+                        
+                        supabase.table("users").insert(user_profile).execute()
+                        st.success("✅ WE ARE IN! Account created. Check your email to confirm.")
+                        
+                    except Exception as profile_err:
+                        st.error(f"🚨 Profile Save Error: {profile_err}")
                 else:
-                    st.error("Auth worked, but the profile row didn't save. Checking permissions...")
-                    
-            except Exception as profile_err:
-                # Catching Foreign Key or Missing Column errors
-                error_msg = str(profile_err)
-                if "foreign key" in error_msg.lower():
-                    st.error("🚨 Database Timing Error: Auth isn't ready yet. Try clicking again in 2 seconds.")
-                else:
-                    st.error(f"🚨 Profile Error: {error_msg}")
-        else:
-            st.error("Signup failed: Supabase Auth did not return a user.")
+                    st.error("Signup failed: Check if email is already taken or password too weak.")
 
+            except Exception as e:
+                st.error(f"🚨 Database Error: {str(e)}")
+
+    if st.button("⬅️ Back to Login"):
+        st.session_state.view = "login"
+        st.rerun()
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
