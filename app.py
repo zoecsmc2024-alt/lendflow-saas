@@ -821,8 +821,18 @@ def save_logo_to_db(image_file):
 def render_sidebar():
     """Handles tenant branding and user info display."""
     role = st.session_state.get("role", "Staff")
-    user = st.session_state.get("user", "User")
-    # Syncing key name with login logic
+    
+    # --- FIX STARTS HERE ---
+    user_obj = st.session_state.get("user")
+    
+    # If it's a Supabase User object, get the email. Otherwise, use a default.
+    if hasattr(user_obj, 'email'):
+        display_name = user_obj.email
+    elif isinstance(user_obj, dict):
+        display_name = user_obj.get('email', 'User')
+    else:
+        display_name = str(user_obj) if user_obj else "Member"
+    # --- FIX ENDS HERE ---
     company_name = st.session_state.get("company", "ZOE CONSULTS")
 
     logo_base64 = get_logo()
