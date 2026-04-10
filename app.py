@@ -843,7 +843,41 @@ def save_logo_to_db(image_file):
     except Exception as e:
         st.error(f"❌ Logo Save Error: {e}")
         return False
+# --- 1. FETCH THE TRUTH FROM DATABASE ---
+def get_current_theme():
+    """Always gets the latest saved color before drawing anything."""
+    tenant_id = st.session_state.get("tenant_id")
+    try:
+        # We fetch only the brand_color to keep it fast
+        res = supabase.table("tenants").select("brand_color").eq("id", tenant_id).execute()
+        if res.data:
+            return res.data[0].get('brand_color', '#2B3F87')
+    except Exception:
+        pass
+    return '#2B3F87' # Global fallback
 
+# --- 2. THE SIDEBAR RENDERER ---
+def render_sidebar():
+    # Fetch the color from the DB function above
+    brand_color = get_current_theme()
+    
+    # Apply CSS ONLY to the sidebar background
+    st.markdown(f"""
+        <style>
+            /* Force the sidebar to follow the DB color */
+            [data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
+            /* Ensure text stays white so it doesn't get lost */
+            [data-testid="stSidebar"] p, 
+            [data-testid="stSidebar"] span, 
+            [data-testid="stSidebar"] label {{
+                color: white !important;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # ... (Rest of your sidebar content)
 # --- 17. SIDEBAR & NAVIGATION ---
 
 def render_sidebar():
