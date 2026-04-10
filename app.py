@@ -2340,27 +2340,29 @@ def show_settings():
         updated_data = {"brand_color": new_color}
         
         # Handle logo upload to Supabase Storage
-        # Inside show_settings() under the Save Button:
-if logo_file:
-    try:
-        bucket_name = 'company-logos'
-        # We name the file using the ID so every boss has their own unique file
-        file_path = f"{st.session_state.tenant_id}_logo.png"
-        
-        # Upload to Supabase Storage (upsert=True replaces the old one)
-        supabase.storage.from_(bucket_name).upload(
-            path=file_path,
-            file=logo_file.getvalue(),
-            file_options={"x-upsert": "true", "content-type": "image/png"}
-        )
-        
-        # Save only the PATH (the filename) to the database
-        updated_data["logo_url"] = file_path 
-        
-    except Exception as e:
-        st.error(f"Storage Error: {e}")
-          st.info("Check if your 'company-logos' bucket is created and set to Public!")
-            return
+        if logo_file:
+            try:
+                bucket_name = 'company-logos'
+                # Path: USER_ID_logo.png
+                file_path = f"{st.session_state.tenant_id}_logo.png"
+                
+                # UPLOAD TO STORAGE
+                supabase.storage.from_(bucket_name).upload(
+                    path=file_path,
+                    file=logo_file.getvalue(),
+                    file_options={
+                        "x-upsert": "true",
+                        "content-type": "image/png"
+                    }
+                )
+                
+                # Save the PATH to the database
+                updated_data["logo_url"] = file_path
+                
+            except Exception as e:
+                st.error(f"❌ Storage Error: {str(e)}")
+                st.info("Check if your 'company-logos' bucket is created!")
+                return # Stop if upload fails
         
         # Update the database record
         try:
