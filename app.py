@@ -891,46 +891,50 @@ def get_logo():
     return None
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (FIXED SELECTORS)
+# 17. SIDEBAR & NAVIGATION (STABLE VERSION)
 # ==========================================
 
 def render_sidebar():
+    """
+    Handles tenant branding, CSS isolation, and navigation header.
+    Fixes NameError: company_name and ensures login visibility.
+    """
+    # 1. FETCH THE THEME DATA
+    # This must happen first to define variables used in the f-string below
     theme_data = get_current_theme()
     brand_color = theme_data.get('brand_color', '#2B3F87')
+    company_name = theme_data.get('name', 'Zoe Consults')
     
+    # 2. INJECT DYNAMIC THEME CSS
+    # This logic keeps the sidebar white-on-color and the main page dark-on-light
     st.markdown(f"""
-    <style>
-        /* 1. SIDEBAR: Force everything to be white */
-        section[data-testid="stSidebar"] {{
-            background-color: {brand_color} !important;
-        }}
-        
-        section[data-testid="stSidebar"] * {{
-            color: white !important;
-        }}
+        <style>
+            /* SIDEBAR: Force branding colors */
+            section[data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
+            
+            section[data-testid="stSidebar"] * {{
+                color: white !important;
+            }}
 
-        /* 2. MAIN BODY: Force all Inputs and Labels to be DARK */
-        /* This targets the login form specifically */
-        [data-testid="stAppViewContainer"] section.main [data-testid="stWidgetLabel"] p {{
-            color: #31333F !important;
-        }}
+            /* MAIN BODY: Force visibility for login labels and inputs */
+            [data-testid="stAppViewContainer"] section.main [data-testid="stWidgetLabel"] p {{
+                color: #002D62 !important; /* Navy blue labels */
+                font-weight: bold !important;
+            }}
 
-        [data-testid="stAppViewContainer"] section.main input {{
-            color: #31333F !important;
-            -webkit-text-fill-color: #31333F !important; /* Fix for some browsers */
-        }}
+            [data-testid="stAppViewContainer"] section.main input {{
+                color: #000000 !important; /* Black typing text */
+                -webkit-text-fill-color: #000000 !important;
+            }}
 
-        /* 3. BUTTONS: Ensure login button text is visible */
-        [data-testid="stAppViewContainer"] section.main button p {{
-            color: #31333F !important;
-        }}
-
-        /* 4. FIX FOR LIGHT BACKGROUND */
-        .stApp {{
-            background-color: #F0F8FF !important;
-        }}
-    </style>
-""", unsafe_allow_html=True)
+            /* APP BACKGROUND */
+            .stApp {{
+                background-color: #F0F8FF !important;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
 
     # 3. RENDER SIDEBAR CONTENT
     with st.sidebar:
@@ -941,10 +945,11 @@ def render_sidebar():
             if logo_data:
                 st.image(logo_data, width=80)
             else:
-                # Fallback if no logo is found
+                # Fallback icon if no logo exists
                 st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
         # --- TENANT INFO BOX ---
+        # Fixed: company_name is now defined above via theme_data.get()
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
