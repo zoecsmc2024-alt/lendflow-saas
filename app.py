@@ -20,24 +20,29 @@ import base64
 from datetime import datetime
 from supabase import create_client
 
-# --- 6. DATA HELPERS ---
+# --- 1. THEME HELPER ---
+def get_current_theme():
+    tenant_id = st.session_state.get("tenant_id")
+    try:
+        res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).execute()
+        if res.data:
+            return res.data[0]
+    except Exception:
+        pass
+    return {'brand_color': '#2B3F87', 'name': 'Zoe Consults'}
 
+# --- 2. LOGO HELPER ---
 def get_logo():
-    """Downloads logo from Supabase 'company-logos' bucket and converts to Base64."""
     try:
         tenant_id = st.session_state.get("tenant_id")
-        if not tenant_id: return None
-            
         res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
-        
         if res.data and res.data[0].get("logo_url"):
             file_path = res.data[0]["logo_url"]
-            # Download directly from bucket
             file_data = supabase.storage.from_('company-logos').download(file_path)
             b64 = base64.b64encode(file_data).decode()
             return f"data:image/png;base64,{b64}"
     except Exception:
-        return None # Fallback to globe icon
+        return None
     return None
 
 @st.cache_data(ttl=600)
@@ -846,101 +851,66 @@ def save_logo_to_db(image_file):
 
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (THEME FINAL)
+# 17. SIDEBAR & NAVIGATION (FULLY SYNCED)
 # ==========================================
 
 def render_sidebar():
-    """Handles tenant branding and user info display with dynamic CSS."""
-    role = st.session_state.get("role", "Staff")
-    user_obj = st.session_state.get("user")
-    
-    # 1. FETCH THE THEME (Single source of truth)
+    """
+    Handles tenant branding, CSS theme injection, and navigation menu.
+    This consolidated version prevents NameErrors and UI drops.
+    """
+    # 1. FETCH THE THEME DATA
+    # We call this once to get the color and company name
     theme_data = get_current_theme()
     brand_color = theme_data.get('brand_color', '#2B3F87')
     company_name = theme_data.get('name', 'Zoe Consults')
-
-    # 2. THE CSS BLOCK (Must be indented to run with the function)
+    
+    # 2. INJECT DYNAMIC THEME CSS
+    # This must be indented inside the function to work!
     st.markdown(f"""
         <style>
-            /* 1. The root sidebar container */
+            /* Main sidebar background */
             section[data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-
-            /* 2. The scrollable inner container (Forces the color to fill) */
+            /* Force the inner container to match (removes grey patches) */
             section[data-testid="stSidebar"] > div:first-child {{
                 background-color: {brand_color} !important;
             }}
-
-            /* 3. All nested blocks inside the sidebar */
-            section[data-testid="stSidebar"] div {{
-                background-color: transparent !important;
-            }}
-
-            /* 4. Global text color for sidebar elements */
+            /* Ensure all text and icons are white for readability */
             section[data-testid="stSidebar"] * {{
                 color: white !important;
             }}
-
-            /* 5. Fix for widget labels (like the radio menu) */
+            /* Fix radio button labels specifically */
             section[data-testid="stWidgetLabel"] p {{
                 color: white !important;
-            }}
-
-            /* 6. Fix for horizontal lines */
-            section[data-testid="stSidebar"] hr {{
-                border-color: rgba(255,255,255,0.2) !important;
             }}
         </style>
     """, unsafe_allow_html=True)
 
-    # 3. SIDEBAR UI CONTENT
+    # 3. RENDER SIDEBAR CONTENT
     with st.sidebar:
-        # LOGO DISPLAY
+        # --- LOGO SECTION ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            logo_data = get_logo() # Fetch from Supabase Bucket
+            logo_data = get_logo()  # Fetches from Supabase bucket
             if logo_data:
                 st.image(logo_data, width=80)
             else:
-                st.write("🌍")
+                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
-        # INFO BOX
+        # --- TENANT INFO BOX ---
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
                         padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
                 <span style="font-size: 14px;">📍 <b>{company_name}</b></span><br>
-                <small style="opacity: 0.8;">{st.session_state.get('user_email', 'User')} ({role})</small>
+                <small style="opacity: 0.8;">{st.session_state.get('user_email', 'User')}</small>
             </div>
             """, 
             unsafe_allow_html=True
         )
-        st.write("---")
-    # USER DISPLAY LOGIC
-    display_name = user_obj.email if hasattr(user_obj, 'email') else "Member"
-
-    with st.sidebar:
-        # LOGO SECTION
-        _, col_mid, _ = st.columns([1, 2, 1])
-        with col_mid:
-            logo_data = get_logo() # From your Section 6
-            if logo_data:
-                st.image(logo_data, width=80)
-            else:
-                st.write("🌍")
-
-        # INFO BOX
-        st.markdown(
-            f"""
-            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
-                        padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
-                <span style="font-size: 14px;">📍 <b>{company_name}</b></span><br>
-                <small style="opacity: 0.8;">{display_name} ({role})</small>
-            </div>
-            """, unsafe_allow_html=True
-        )
-        st.write("---")
+        
         st.write("---")
 
 def show_sidebar_menu():
@@ -959,7 +929,8 @@ def show_sidebar_menu():
             st.session_state.clear()
             st.rerun()
     
-    return selection.split(" ", 1)[1]
+    # Return only the text part of the selection (e.g., "Settings")
+    return selection.split(" ", 1)[1] if " " in selection else selection
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
@@ -2649,7 +2620,9 @@ if __name__ == "__main__":
         page = show_sidebar_menu()
         
         try:
-            if page == "Overview":
+            if page == "Settings":
+                show_settings()
+            elif page == "Overview":
                 show_dashboard_view()
                 
             elif page == "Loans":
@@ -2685,9 +2658,6 @@ if __name__ == "__main__":
 
             elif page == "Reports":
                 show_reports()
-                
-            elif page == "Settings":
-                show_settings()
                 
             else:
                 st.info(f"The {page} module is coming online soon.")
