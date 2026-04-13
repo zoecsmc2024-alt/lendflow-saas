@@ -953,12 +953,26 @@ def render_sidebar():
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
             logo_val = active_company.get('logo_url')
+            
             if logo_val and logo_val != "0":
                 import time
-                # Safety check for full URLs vs paths
-                final_logo_url = logo_val if str(logo_val).startswith("http") else f"https://YOUR_PROJECT_ID.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
-                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+                # Check if it's already a full URL or just a filename
+                if str(logo_val).startswith("http"):
+                    final_logo_url = logo_val
+                else:
+                    # Replace 'YOUR_PROJECT_ID' with your actual Supabase Project ID
+                    # Ensure the bucket name 'company-logos' matches your Supabase Storage
+                    project_id = "YOUR_PROJECT_ID" 
+                    final_logo_url = f"https://{project_id}.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
+                
+                try:
+                    # The ?t= timestamp prevents the 'broken' image from being cached
+                    st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+                except Exception:
+                    # If the URL is still invalid, show a building icon instead of crashing
+                    st.markdown("<h2 style='text-align: center;'>🏢</h2>", unsafe_allow_html=True)
             else:
+                # Default icon if no logo is found
                 st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
         # --- 5. INFO BOX ---
