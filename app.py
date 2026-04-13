@@ -2453,62 +2453,67 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        # Show the current logo as a thumbnail if it exists
-        if active_company.get('logo_url'):
-            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
+        # Safety check for logo preview using full URL logic
+        logo_url = active_company.get('logo_url')
+        if logo_url and str(logo_url).startswith("http"):
+            import time
+            st.image(f"{logo_url}?t={int(time.time())}", use_container_width=True, caption="Current Logo")
         else:
-            st.caption("No logo uploaded yet.")
+            st.info("No logo uploaded yet.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-    # --- SAVE BUTTON ---
+    # --- SAVE BUTTON (Correctly Indented) ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-    updated_data = {"brand_color": new_color}
-    
-    if logo_file:
-        try:
-            bucket_name = 'company-logos'
-            # We use a consistent path: logos/TENANT_ID.png
-            file_path = f"logos/{active_company['id']}.png"
-            
-            # 1. Upload to Storage
-            supabase.storage.from_(bucket_name).upload(
-                path=file_path,
-                file=logo_file.getvalue(),
-                file_options={
-                    "x-upsert": "true",
-                    "content-type": "image/png" 
-                }
-            )
-            
-            # 2. Get the ACTUAL public URL from Supabase
-            public_url_res = supabase.storage.from_(bucket_name).get_public_url(file_path)
-            
-            # Handle different return types of get_public_url
-            if isinstance(public_url_res, dict):
-                logo_url = public_url_res.get('publicURL')
-            else:
-                logo_url = public_url_res # Some versions return the string directly
+        updated_data = {"brand_color": new_color}
+        
+        # 1. Handle Storage Upload
+        if logo_file:
+            try:
+                bucket_name = 'company-logos'
+                file_path = f"logos/{active_company['id']}.png"
                 
-            updated_data["logo_url"] = logo_url
+                # Upload to Storage
+                supabase.storage.from_(bucket_name).upload(
+                    path=file_path,
+                    file=logo_file.getvalue(),
+                    file_options={
+                        "x-upsert": "true",
+                        "content-type": "image/png" 
+                    }
+                )
+                
+                # Get ACTUAL public URL
+                public_url_res = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                
+                # Standardize the result (Supabase library versions vary)
+                if isinstance(public_url_res, dict):
+                    final_url = public_url_res.get('publicURL')
+                else:
+                    final_url = public_url_res
+                    
+                updated_data["logo_url"] = final_url
+                
+            except Exception as e:
+                st.error(f"❌ Storage Error: {str(e)}")
+                st.stop()
+
+        # 2. Update Database & Session (Now inside the IF block)
+        try:
+            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+            
+            # Sync session state for immediate UI feedback
+            st.session_state['theme_color'] = new_color
+            if "logo_url" in updated_data:
+                st.session_state['logo_url'] = updated_data["logo_url"]
+            
+            st.success("✅ Branding updated!")
+            time.sleep(1) # Brief pause so user sees the success message
+            st.rerun()
             
         except Exception as e:
-            st.error(f"❌ Storage Error: {str(e)}")
-            st.stop()
+            st.error(f"❌ Database Error: {str(e)}")
 
-    # 3. Update Database
-    try:
-        supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
-        
-        # Update Session State so the change is instant
-        st.session_state['theme_color'] = new_color
-        if "logo_url" in updated_data:
-            st.session_state['logo_url'] = updated_data["logo_url"]
-        
-        st.success("✅ Branding updated!")
-        st.rerun()
-    except Exception as e:
-        st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
 # ==========================================
