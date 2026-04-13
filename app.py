@@ -1514,7 +1514,7 @@ def show_collateral():
                     st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
                     c1, c2 = st.columns(2)
                     
-                    # SHORT ID LOGIC: Slices ID to 8 chars for a clean UI
+                    # SHORT ID LOGIC: Slices ID to 8 chars for a clean UI dropdown
                     loan_map = {
                         f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
                         for _, row in available_loans.iterrows()
@@ -1525,6 +1525,7 @@ def show_collateral():
                     desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
                     est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
 
+                    # FIXED: Form submit button explicitly defined
                     submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
                 if submit:
@@ -1542,7 +1543,7 @@ def show_collateral():
                             "value": float(est_value),
                             "status": "Held",
                             "date_added": datetime.now().strftime("%Y-%m-%d"),
-                            "tenant_id": current_tenant # CRITICAL for RLS
+                            "tenant_id": current_tenant # FIX: Essential for Row-Level Security
                         }])
                         
                         if save_data("collateral", new_asset):
@@ -1567,14 +1568,14 @@ def show_collateral():
             in_custody = collateral_df[collateral_df[c_stat_col].isin(["In Custody", "Held", "held"])].shape[0]
             
             m1, m2 = st.columns(2)
-            m1.markdown(f"""<div style="background-color: #F0F8FF; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">TOTAL ASSET SECURITY</p><h2 style="margin:0; color:{brand_color};">{total_val:,.0f} <span style="font-size:14px;">UGX</span></h2></div>""", unsafe_allow_html=True)
-            m2.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">ACTIVE ASSETS</p><h2 style="margin:0; color:{brand_color};">{in_custody}</h2></div>""", unsafe_allow_html=True)
+            m1.markdown(f"""<div style="background-color: #F0F8FF; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color};"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">TOTAL ASSET SECURITY</p><h2 style="margin:0; color:{brand_color};">{total_val:,.0f} <span style="font-size:14px;">UGX</span></h2></div>""", unsafe_allow_html=True)
+            m2.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color};"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">ACTIVE ASSETS</p><h2 style="margin:0; color:{brand_color};">{in_custody}</h2></div>""", unsafe_allow_html=True)
 
             # 4. Table Generation (Clean Truncated IDs)
             rows_html = ""
             for i, r in collateral_df.reset_index().iterrows():
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                display_id = str(r.get(c_id_col))[:8] # Clean view
+                display_id = str(r.get(c_id_col))[:8] 
                 rows_html += f"""
                 <tr style="background-color: {bg}; border-bottom: 1px solid #ddd;">
                     <td style="padding:10px; color:#666; font-size:11px;">#{display_id}</td>
@@ -1591,10 +1592,9 @@ def show_collateral():
             # 5. Manage Records
             st.markdown("---")
             with st.expander("⚙️ Manage Collateral Records"):
-                manage_list = collateral_df.apply(lambda x: f"ID: {str(x[c_id_col])[:8]}... | {x[c_bor_col]} - {x.get('description', '')}", axis=1).tolist()
+                manage_list = collateral_df.apply(lambda x: f"ID: {str(x[c_id_col])[:8]}... | {x[c_bor_col]}", axis=1).tolist()
                 selected_col = st.selectbox("Select Asset to Modify", manage_list)
                 
-                # Match full ID back from the selected label
                 c_idx = manage_list.index(selected_col)
                 c_id_full = collateral_df.iloc[c_idx][c_id_col]
                 c_row = collateral_df.iloc[c_idx]
@@ -1618,11 +1618,6 @@ def show_collateral():
                     if save_data("collateral", update_df):
                         st.success("✅ Asset record updated!")
                         st.rerun()
-
-                if st.button("🗑️ Delete Asset Record", use_container_width=True):
-                    supabase.table("collateral").delete().eq("id", c_id_full).execute()
-                    st.warning("⚠️ Asset record deleted.")
-                    st.rerun()
         else:
             st.info("💡 No collateral registered yet.")
             
