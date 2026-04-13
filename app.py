@@ -1088,8 +1088,8 @@ def show_borrowers():
                                 st.error("Delete failed. You might not have permission (Check RLS).")
                         except Exception as e:
                             st.error(f"Database Error: {e}")
-            else:
-                st.info("No borrowers found to manage.")
+                        else:
+                            st.info("No borrowers found to manage.")
 # ==============================
 # 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
 # ==============================
