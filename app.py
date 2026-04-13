@@ -1501,13 +1501,13 @@ def show_collateral():
 
     # --- TAB 1: REGISTER COLLATERAL ---
 with tab_reg:
-    # 1. INITIALIZE COLUMN NAMES (Fixes NameError at line 1503)
+    # PRE-INITIALIZE (Fixes NameError at line 1503)
     l_id_col, l_bor_col, status_col = "id", "borrower", "status" 
 
     if loans_df.empty:
         st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
     else:
-        # Normalize and detect columns dynamically
+        # Dynamic Column Detection (Prevents KeyError: 'borrower')
         loans_df.columns = loans_df.columns.str.lower()
         l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
         l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
@@ -1520,30 +1520,29 @@ with tab_reg:
         if available_loans.empty:
             st.info("✅ All current loans are cleared. No assets need to be held.")
         else:
+            # FORM FIX: Submit button MUST be inside this block
             with st.form("collateral_form", clear_on_submit=True):
                 st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 
-                # --- SHORT ID MAPPING ---
-                # Key: "9e802e3d | BOLTON" -> Value: "9e802e3d-944c-..."
+                # Contextual Labeling (Short ID | Name)
                 loan_map = {
                     f"{str(row[l_id_col])[:8]} | {row[l_bor_col]}": row[l_id_col] 
                     for _, row in available_loans.iterrows()
                 }
                 
                 selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
-                
                 asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
                 desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
                 est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
 
+                # The essential submit button
                 submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
             if submit:
                 if desc and est_value > 0:
-                    # Retrieve original data from mapping
                     full_loan_id = loan_map[selected_label]
-                    # Find original borrower name from the dataframe using the full ID
+                    # Get correct borrower name from the full ID
                     original_row = available_loans[available_loans[l_id_col] == full_loan_id].iloc[0]
                     sel_borrower = original_row[l_bor_col]
                     
