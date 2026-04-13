@@ -1080,16 +1080,32 @@ def show_loans():
     # ==============================
     with tab_view:
         if not loans_df.empty:
-            sel_id = st.selectbox("🔍 Select Loan to Inspect", loans_df["id"].unique(), key="inspect_sel_v5")
-            
-            # BRANDED METRIC CARDS (Restored Peach/Navy Blend)
-            loan_history = loans_df[loans_df["id"] == sel_id]
-            if not loan_history.empty:
-                latest_info = loan_history.sort_values("start_date").iloc[-1]
-                rec_val, out_val, stat_val = latest_info['amount_paid'], latest_info['balance'], str(latest_info['status']).upper()
-                if stat_val == "CLOSED": out_val = 0
+            # --- FIX: MAP BORROWER NAMES TO LOANS ---
+            # This creates the 'borrower' column that was missing
+            if not df.empty:
+                bor_map = dict(zip(df['id'], df['name']))
+                loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
             else:
-                rec_val, out_val, stat_val = 0, 0, "N/A"
+                loans_df['borrower'] = "No Borrower Data"
+
+            # Create a selection label that combines ID and Name for clarity
+            loans_df['display_label'] = loans_df['loan_id_label'] + " - " + loans_df['borrower']
+            
+            sel_label = st.selectbox("🔍 Select Loan to Inspect", 
+                                     options=loans_df['display_label'].unique(), 
+                                     key="inspect_sel_v5")
+            
+            # Get the specific loan data
+            latest_info = loans_df[loans_df["display_label"] == sel_label].iloc[-1]
+            
+            # --- BRANDED METRIC CARDS ---
+            # Map database columns: 'amount_paid' and 'total_repayable' - 'amount_paid' for balance
+            rec_val = latest_info.get('amount_paid', 0)
+            # Use total_repayable - amount_paid to calculate current balance
+            out_val = latest_info.get('total_repayable', 0) - rec_val
+            stat_val = str(latest_info.get('status', 'N/A')).upper()
+            
+            if stat_val == "CLOSED": out_val = 0
 
             c1, c2, c3 = st.columns(3)
             card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"
@@ -1101,21 +1117,31 @@ def show_loans():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # RENDER THE PEACHY TABLE (Preserved Custom Styler)
+            # --- RENDER THE PEACHY TABLE ---
             def style_loan_table(row):
                 bg_color = "#FFF9F5" 
                 status = str(row["status"])
                 colors = {"Active": "#4A90E2", "Closed": "#2E7D32", "Overdue": "#D32F2F", "BCF": "#FFA500"}
                 s_color = colors.get(status, "#666666")
                 styles = [f'background-color: {bg_color}; color: #0A192F;'] * len(row)
+                # Apply status color to the last column
                 styles[-1] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px;'
                 return styles
 
-            show_cols = ["id", "borrower", "principal", "balance", "start_date", "end_date", "status"]
+            # Ensure we only use columns that actually exist to avoid new 'Index' errors
+            # Swapped 'id' for 'loan_id_label' and 'balance' for 'total_repayable'
+            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "start_date", "status"]
+            
             st.dataframe(
-                loans_df[show_cols].style.format({"principal": "{:,.0f}", "balance": "{:,.0f}"}).apply(style_loan_table, axis=1), 
-                use_container_width=True, hide_index=True
+                loans_df[show_cols].style.format({
+                    "principal": "{:,.0f}", 
+                    "total_repayable": "{:,.0f}"
+                }).apply(style_loan_table, axis=1), 
+                use_container_width=True, 
+                hide_index=True
             )
+        else:
+            st.info("No loans found. Head over to 'New Loan' to get started!")
 
 # ==============================
     # TAB: NEW LOAN (Supabase Integration)
