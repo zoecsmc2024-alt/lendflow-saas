@@ -127,22 +127,26 @@ def get_cached_data_refined(table_name):
         return pd.DataFrame()
 
 # --- DATA LOADING SECTION ---
-# Load Borrowers
 df = get_cached_data_refined("borrowers")
 if df.empty:
     df = pd.DataFrame(columns=["id", "name", "phone", "email", "address", "national_id", "next_of_kin", "status", "tenant_id"])
 
-# Load Loans
 loans_df = get_cached_data_refined("loans")
 if loans_df.empty:
     loans_df = pd.DataFrame(columns=["id", "loan_id_label", "borrower_id", "principal", "total_repayable", "amount_paid", "status", "start_date", "tenant_id"])
 
-# CRITICAL BRIDGE: Map borrower names to loans immediately
-if not loans_df.empty and not df.empty:
-    bor_map = dict(zip(df['id'], df['name']))
-    loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
-elif not loans_df.empty:
-    loans_df['borrower'] = "No Borrower Data"
+# --- UPDATED CRITICAL BRIDGE ---
+if not loans_df.empty:
+    if not df.empty:
+        # Ensure we are mapping ID strings to Name strings
+        bor_map = dict(zip(df['id'].astype(str), df['name'].astype(str)))
+        
+        # Convert borrower_id to string to match the map keys
+        # Then map and explicitly handle the series to prevent 'int' errors
+        loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map)
+        loans_df['borrower'] = loans_df['borrower'].fillna("Unknown")
+    else:
+        loans_df['borrower'] = "No Borrower Data"
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
     """Legacy helper maintained for backward compatibility."""
