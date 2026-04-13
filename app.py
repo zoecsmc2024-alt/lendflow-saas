@@ -858,22 +858,34 @@ def render_sidebar():
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
 import uuid # CRITICAL: Fixes the UUID NameError
+import streamlit as st
+import pandas as pd
 
 def show_borrowers():
     """
     Manages borrower profiles. 
     Fixed for Supabase UUID and RLS compliance.
+    Includes "Fuzzy Column Matching" to prevent 'borrower' key errors.
     """
     # Maintain visual brand color sync from session state
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     st.markdown(f"<h2 style='color: {brand_color};'>👥 Borrowers Management</h2>", unsafe_allow_html=True)
     
-    # 1. FETCH TENANT DATA
+    # 1. FETCH DATA
     df = get_cached_data("borrowers")
     
-    # Ensure columns exist even if the DB is empty to prevent crashes
+    # Ensure columns exist even if the DB is empty
     if df.empty:
         df = pd.DataFrame(columns=["id", "name", "phone", "email", "address", "national_id", "next_of_kin", "status", "tenant_id"])
+    else:
+        # Normalize columns to lowercase to prevent case-sensitive crashes
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+    # 2. DYNAMIC COLUMN DETECTION (The Fix for the 'borrower' Error)
+    # This looks for the most likely name/phone/status columns
+    name_col = next((c for c in df.columns if 'name' in c or 'borrower' in c), "name")
+    phone_col = next((c for c in df.columns if 'phone' in c), "phone")
+    status_col = next((c for c in df.columns if 'status' in c), "status")
 
     # --- TABS DEFINITION ---
     tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
@@ -888,39 +900,47 @@ def show_borrowers():
         filtered_df = df.copy()
         
         if not filtered_df.empty:
-            filtered_df["name"] = filtered_df["name"].astype(str)
-            filtered_df["phone"] = filtered_df["phone"].astype(str)
+            # Safely convert to string for searching
+            filtered_df[name_col] = filtered_df[name_col].astype(str)
+            if phone_col in filtered_df.columns:
+                filtered_df[phone_col] = filtered_df[phone_col].astype(str)
             
-            mask = (filtered_df["name"].str.lower().str.contains(search, na=False) | 
-                    filtered_df["phone"].str.contains(search, na=False))
+            # Perform search using the detected column names
+            mask = filtered_df[name_col].str.lower().str.contains(search, na=False)
+            if phone_col in filtered_df.columns:
+                mask |= filtered_df[phone_col].str.contains(search, na=False)
+                
             filtered_df = filtered_df[mask]
             
-            if status_filter != "All":
-                filtered_df = filtered_df[filtered_df["status"] == status_filter]
+            if status_filter != "All" and status_col in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df[status_col].astype(str).str.title() == status_filter]
 
             if not filtered_df.empty:
                 rows_html = ""
                 for i, r in filtered_df.reset_index().iterrows():
                     bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                     
-                    # Safely grab the new data points
+                    # Safely grab values using .get() to prevent 'KeyError' crashes
+                    name_val = r.get(name_col, 'Unknown')
+                    phone_val = r.get(phone_col, 'N/A')
                     email_val = r.get('email', 'N/A')
                     nok_val = r.get('next_of_kin', 'N/A')
+                    stat_val = r.get(status_col, 'Active')
                     
                     rows_html += f"""
                     <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
-                        <td style="padding:12px;"><b>{r['name']}</b></td>
-                        <td style="padding:12px;">{r['phone']}</td>
+                        <td style="padding:12px;"><b>{name_val}</b></td>
+                        <td style="padding:12px;">{phone_val}</td>
                         <td style="padding:12px;">{email_val}</td>
                         <td style="padding:12px;">{nok_val}</td>
                         <td style="padding:12px; text-align:center;">
-                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
+                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{stat_val}</span>
                         </td>
                     </tr>"""
                 
-                # Render the table with 5 columns
+                # Render the table
                 st.markdown(f"""
-                <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
+                <div style='border:2px solid {brand_color}33; border-radius:10px; overflow:hidden; margin-top:20px;'>
                     <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
                         <thead>
                             <tr style='background:{brand_color}; color:white; text-align:left;'>
@@ -939,7 +959,7 @@ def show_borrowers():
         else:
             st.info("No borrowers registered yet.")
 
-    # --- TAB 2: ADD BORROWER ---
+# --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
             st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
