@@ -855,10 +855,13 @@ def show_borrowers():
     # 1. FETCH TENANT DATA
     df = get_cached_data("borrowers")
     
+    # Ensure columns exist even if the DB is empty to prevent crashes
     if df.empty:
-        df = pd.DataFrame(columns=["id", "name", "phone", "address", "national_id", "status", "tenant_id"])
+        df = pd.DataFrame(columns=["id", "name", "phone", "email", "address", "national_id", "next_of_kin", "status", "tenant_id"])
 
-    # --- TAB 1: VIEW ALL ---
+    # --- TABS DEFINITION ---
+    tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
+
     with tab_view:
         col1, col2 = st.columns([3, 1]) 
         with col1:
@@ -866,7 +869,6 @@ def show_borrowers():
         with col2:
             status_filter = st.selectbox("Filter Status", ["All", "Active", "Inactive"], key="bor_status_filt")
 
-        # Ensure 'df' is your borrowers dataframe
         filtered_df = df.copy()
         
         if not filtered_df.empty:
@@ -880,13 +882,12 @@ def show_borrowers():
             if status_filter != "All":
                 filtered_df = filtered_df[filtered_df["status"] == status_filter]
 
-            # --- INDENTATION FIXED BELOW ---
             if not filtered_df.empty:
                 rows_html = ""
                 for i, r in filtered_df.reset_index().iterrows():
                     bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                     
-                    # Use .get() to safely grab data even if it's missing for old records
+                    # Safely grab the new data points
                     email_val = r.get('email', 'N/A')
                     nok_val = r.get('next_of_kin', 'N/A')
                     
@@ -901,7 +902,7 @@ def show_borrowers():
                         </td>
                     </tr>"""
                 
-                # Render the table
+                # Render the table with 5 columns
                 st.markdown(f"""
                 <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
                     <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
@@ -921,6 +922,7 @@ def show_borrowers():
                 st.info("No borrowers found matching your search.")
         else:
             st.info("No borrowers registered yet.")
+
     # --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
