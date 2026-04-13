@@ -21,9 +21,13 @@ from datetime import datetime
 from supabase import create_client
 import streamlit as st
 import pandas as pd
-import time  # Fixes local variable 'time' error
+import time
+st.set_page_config(layout="wide")
 # --- CONFIGURATION (Add this!) ---
 SESSION_TIMEOUT = 30
+
+# MUST BE THE FIRST ST COMMAND
+
 
 def apply_master_theme():
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
@@ -2479,8 +2483,15 @@ def show_settings():
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
-# 1. CORE PAGE FUNCTIONS (Branding Aware)
+# 1. CORE PAGE FUNCTIONS (Branding & Wide Layout)
 # ==========================================
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+# IMPORTANT: Run this as the very first Streamlit command in your app.py
+# st.set_page_config(layout="wide") 
 
 def get_active_color():
     """Helper to get the current theme color for consistent UI styling."""
@@ -2501,7 +2512,7 @@ def show_overview():
 def show_dashboard_view():
     """
     Main Dashboard view. 
-    Synchronized with Tenant brand_color.
+    Synchronized with Tenant brand_color and Wide Layout.
     """
     brand_color = get_active_color()
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
@@ -2516,22 +2527,24 @@ def show_dashboard_view():
         st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
         return
 
-    # 2. STANDARDIZE COLUMNS (Prevents 'Status' vs 'status' errors)
+    # 2. STANDARDIZE COLUMNS
     for d in [df, pay_df, exp_df, bor_df]:
         if not d.empty:
             d.columns = d.columns.str.strip().str.replace(" ", "_")
 
-    # 3. BRIDGE: Map borrower names to the loans table
-    if not bor_df.empty and 'borrower_id' in df.columns:
+    # 3. BRIDGE: Map borrower names
+    bor_map = {}
+    if not bor_df.empty and 'id' in bor_df.columns:
         bor_map = dict(zip(bor_df['id'].astype(str), bor_df['name'].astype(str)))
+        
+    if 'borrower_id' in df.columns:
         df['Borrower_Name'] = df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
     else:
-        df['Borrower_Name'] = "Unknown"
+        df['Borrower_Name'] = df.get('Borrower', 'Unknown')
 
-    # 4. CLEAN DATA (Helper function to prevent 'int' object errors)
+    # 4. CLEAN DATA (Prevents 'int' object errors)
     def clean_val(dataframe, col):
         if col in dataframe.columns:
-            # Explicitly return a Series to allow .fillna()
             return pd.to_numeric(dataframe[col], errors="coerce").fillna(0)
         return pd.Series(0, index=dataframe.index)
 
@@ -2540,14 +2553,10 @@ def show_dashboard_view():
     df["Amount_Paid"] = clean_val(df, "Amount_Paid")
     df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
     
-    today = pd.Timestamp.now().normalize()
+    # Status Normalization
+    df["Status_Clean"] = df["Status"].astype(str).str.title() if "Status" in df.columns else "Active"
     
-    # Fix Status filtering (Standardize to Title Case)
-    if "Status" in df.columns:
-        df["Status_Clean"] = df["Status"].astype(str).str.title()
-    else:
-        df["Status_Clean"] = "Active"
-
+    today = pd.Timestamp.now().normalize()
     active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
     active_df = df[df["Status_Clean"].isin(active_statuses)].copy()
 
@@ -2555,25 +2564,20 @@ def show_dashboard_view():
     total_issued = active_df["Principal"].sum() if not active_df.empty else 0
     total_interest_expected = active_df["Interest"].sum() if not active_df.empty else 0
     total_collected = df["Amount_Paid"].sum() 
-    
-    overdue_count = 0
-    if not active_df.empty:
-        overdue_count = active_df[(active_df["End_Date"] < today) & (active_df["Status_Clean"] != "Cleared")].shape[0]
+    overdue_count = active_df[(active_df["End_Date"] < today) & (active_df["Status_Clean"] != "Cleared")].shape[0] if not active_df.empty else 0
 
     # 6. BRANDED METRICS ROW
     m1, m2, m3, m4 = st.columns(4)
     metric_style = f"background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
     
-    m1.markdown(f"""<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    m2.markdown(f"""<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    
-    # Special Colors for Green/Red metrics
-    m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
+    m1.markdown(f'<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
+    m2.markdown(f'<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
+    m3.markdown(f'<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
+    m4.markdown(f'<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>', unsafe_allow_html=True)
 
     st.write("---")
     
-    # 7. BRANDED TABLES
+    # 7. BRANDED TABLES (Row HTML Logic Re-added)
     t1, t2 = st.columns(2)
 
     with t1:
@@ -2599,12 +2603,9 @@ def show_dashboard_view():
         st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
         pay_rows = ""
         if not pay_df.empty:
-            # Sync names for payments using the same bridge
-            if 'borrower_id' in pay_df.columns and not bor_df.empty:
+            if 'borrower_id' in pay_df.columns:
                  pay_df['Borrower_Name'] = pay_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
-            else:
-                 pay_df['Borrower_Name'] = pay_df.get('Borrower', 'Unknown')
-
+            
             recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
             for i, (_, r) in enumerate(recent_pay.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
@@ -2619,7 +2620,7 @@ def show_dashboard_view():
             <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
         </table>""", unsafe_allow_html=True)
 
-    # 8. DASHBOARD VISUALS
+    # 8. DASHBOARD VISUALS (Charts Re-added)
     st.markdown("---")
     c_pie, c_bar = st.columns(2)
 
@@ -2632,11 +2633,17 @@ def show_dashboard_view():
             st.plotly_chart(fig_pie, use_container_width=True)
 
     with c_bar:
-        if not pay_df.empty and not exp_df.empty:
-            pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
-            exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
+        if not pay_df.empty:
+            pay_df["Date"] = pd.to_datetime(pay_df.get("Date"), errors='coerce')
             inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
-            exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            
+            # Use empty df for expenses if none exist to avoid merge crash
+            if not exp_df.empty:
+                exp_df["Date"] = pd.to_datetime(exp_df.get("Date"), errors='coerce')
+                exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            else:
+                exp_m = pd.DataFrame(columns=["Date", "Amount"])
+
             m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
             m_cash.columns = ["Month", "Income", "Expenses"]
             fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
