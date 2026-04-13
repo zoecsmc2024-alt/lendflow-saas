@@ -126,15 +126,23 @@ def get_cached_data_refined(table_name):
         st.error(f"Database Error: {e}")
         return pd.DataFrame()
 
-# --- TOP OF SCRIPT (Data Loading Section) ---
-# CHANGE THIS: fetch_data("loans") 
-# TO THIS:
-loans_df = get_cached_data_refined("loans") 
+# --- DATA LOADING SECTION ---
+# Load Borrowers
+df = get_cached_data_refined("borrowers")
+if df.empty:
+    df = pd.DataFrame(columns=["id", "name", "phone", "email", "address", "national_id", "next_of_kin", "status", "tenant_id"])
 
-if not loans_df.empty:
-    # This fixes the "['borrower'] not in index" error seen in Portfolio View
-    if 'borrower_id' in loans_df.columns and 'borrower' not in loans_df.columns:
-        loans_df['borrower'] = loans_df['borrower_id']
+# Load Loans
+loans_df = get_cached_data_refined("loans")
+if loans_df.empty:
+    loans_df = pd.DataFrame(columns=["id", "loan_id_label", "borrower_id", "principal", "total_repayable", "amount_paid", "status", "start_date", "tenant_id"])
+
+# CRITICAL BRIDGE: Map borrower names to loans immediately
+if not loans_df.empty and not df.empty:
+    bor_map = dict(zip(df['id'], df['name']))
+    loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
+elif not loans_df.empty:
+    loans_df['borrower'] = "No Borrower Data"
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
     """Legacy helper maintained for backward compatibility."""
@@ -1080,33 +1088,33 @@ def show_loans():
     # ==============================
     with tab_view:
         if not loans_df.empty:
-            # --- FIX: MAP BORROWER NAMES TO LOANS ---
-            # This creates the 'borrower' column that was missing
+            # 1. THE BRIDGE: Map names if they aren't already mapped
             if not df.empty:
                 bor_map = dict(zip(df['id'], df['name']))
                 loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
             else:
                 loans_df['borrower'] = "No Borrower Data"
 
-            # Create a selection label that combines ID and Name for clarity
-            loans_df['display_label'] = loans_df['loan_id_label'] + " - " + loans_df['borrower']
+            # 2. SELECTOR: Combine Label and Name for the dropdown
+            loans_df['display_label'] = loans_df['loan_id_label'].astype(str) + " - " + loans_df['borrower'].astype(str)
             
             sel_label = st.selectbox("🔍 Select Loan to Inspect", 
                                      options=loans_df['display_label'].unique(), 
                                      key="inspect_sel_v5")
             
-            # Get the specific loan data
+            # 3. DATA SLICE: Get details for the selected loan
             latest_info = loans_df[loans_df["display_label"] == sel_label].iloc[-1]
             
-            # --- BRANDED METRIC CARDS ---
-            # Map database columns: 'amount_paid' and 'total_repayable' - 'amount_paid' for balance
-            rec_val = latest_info.get('amount_paid', 0)
-            # Use total_repayable - amount_paid to calculate current balance
-            out_val = latest_info.get('total_repayable', 0) - rec_val
+            # 4. METRICS CALCULATION
+            rec_val = float(latest_info.get('amount_paid', 0))
+            total_rep = float(latest_info.get('total_repayable', 0))
+            out_val = total_rep - rec_val
             stat_val = str(latest_info.get('status', 'N/A')).upper()
             
-            if stat_val == "CLOSED": out_val = 0
+            if stat_val == "CLOSED": 
+                out_val = 0
 
+            # --- BRANDED METRIC CARDS ---
             c1, c2, c3 = st.columns(3)
             card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"
             text_style = "margin:0; color:#0A192F;"
@@ -1119,19 +1127,22 @@ def show_loans():
 
             # --- RENDER THE PEACHY TABLE ---
             def style_loan_table(row):
-                bg_color = "#FFF9F5" 
+                # Status-based colors
                 status = str(row["status"])
                 colors = {"Active": "#4A90E2", "Closed": "#2E7D32", "Overdue": "#D32F2F", "BCF": "#FFA500"}
                 s_color = colors.get(status, "#666666")
-                styles = [f'background-color: {bg_color}; color: #0A192F;'] * len(row)
-                # Apply status color to the last column
-                styles[-1] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px;'
+                
+                # Default style for all cells
+                styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
+                # Find the 'status' column index to apply the badge style
+                status_idx = row.index.get_loc("status")
+                styles[status_idx] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px; text-align: center;'
                 return styles
 
-            # Ensure we only use columns that actually exist to avoid new 'Index' errors
-            # Swapped 'id' for 'loan_id_label' and 'balance' for 'total_repayable'
+            # Select specific columns to keep the table clean
             show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "start_date", "status"]
             
+            # Final Table Display
             st.dataframe(
                 loans_df[show_cols].style.format({
                     "principal": "{:,.0f}", 
