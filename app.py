@@ -1501,16 +1501,19 @@ def show_collateral():
 
     # --- TAB 1: REGISTER COLLATERAL ---
 with tab_reg:
+    # 1. INITIALIZE COLUMN NAMES (Fixes NameError at line 1503)
+    l_id_col, l_bor_col, status_col = "id", "borrower", "status" 
+
     if loans_df.empty:
         st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
     else:
-        # 1. Normalize and detect columns
+        # Normalize and detect columns dynamically
         loans_df.columns = loans_df.columns.str.lower()
         l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
-        l_bor_col = next((c for c in loans_df.columns if 'borrower' in c), "borrower")
+        l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
         status_col = next((c for c in loans_df.columns if 'status' in c), "status")
 
-        # 2. Filter for active loans
+        # Filter for active loans
         active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
         available_loans = loans_df[loans_df[status_col].astype(str).str.title().isin(active_statuses)].copy()
 
@@ -1521,15 +1524,10 @@ with tab_reg:
                 st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 
-                # --- THE BEAUTIFUL DROPDOWN LOGIC ---
-                # Create a mapping: "Short ID | Name" -> "Full UUID"
+                # --- SHORT ID MAPPING ---
+                # Key: "9e802e3d | BOLTON" -> Value: "9e802e3d-944c-..."
                 loan_map = {
                     f"{str(row[l_id_col])[:8]} | {row[l_bor_col]}": row[l_id_col] 
-                    for _, row in available_loans.iterrows()
-                }
-                # Create a mapping for the borrower names to avoid parsing strings later
-                borrower_map = {
-                    row[l_id_col]: row[l_bor_col] 
                     for _, row in available_loans.iterrows()
                 }
                 
@@ -1543,13 +1541,15 @@ with tab_reg:
 
             if submit:
                 if desc and est_value > 0:
-                    # Retrieve the full UUID and the correct borrower name from our maps
+                    # Retrieve original data from mapping
                     full_loan_id = loan_map[selected_label]
-                    correct_borrower = borrower_map[full_loan_id]
+                    # Find original borrower name from the dataframe using the full ID
+                    original_row = available_loans[available_loans[l_id_col] == full_loan_id].iloc[0]
+                    sel_borrower = original_row[l_bor_col]
                     
                     new_asset = pd.DataFrame([{
-                        "borrower": correct_borrower,
-                        "loan_id": full_loan_id, # This is the full UUID for the database
+                        "borrower": sel_borrower,
+                        "loan_id": full_loan_id,
                         "type": asset_type,
                         "description": desc,
                         "value": float(est_value),
@@ -1559,7 +1559,7 @@ with tab_reg:
                     }])
                     
                     if save_data("collateral", new_asset):
-                        st.success(f"✅ Asset registered for {correct_borrower}!")
+                        st.success(f"✅ Asset registered for {sel_borrower}!")
                         st.rerun()
                 else:
                     st.error("⚠️ Provide both a description and value.")
