@@ -897,10 +897,12 @@ def show_borrowers():
             
             if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
                 if name and phone:
-                    # FIX: Generate a valid UUID to prevent "invalid input syntax" error
+                    # FIX: Generate a valid UUID
                     new_id = str(uuid.uuid4())
                     
-                    # FIX: Explicitly include tenant_id to satisfy Supabase RLS policies
+                    # FIX: Fallback for tenant_id to prevent RLS violations (Error 42501)
+                    t_id = st.session_state.get('tenant_id', 'default-admin')
+                    
                     new_entry = pd.DataFrame([{
                         "id": new_id, 
                         "name": name, 
@@ -908,7 +910,7 @@ def show_borrowers():
                         "national_id": nid, 
                         "address": addr, 
                         "status": "Active",
-                        "tenant_id": st.session_state.get('tenant_id') 
+                        "tenant_id": t_id 
                     }])
                     
                     if save_data("borrowers", new_entry):
@@ -916,7 +918,6 @@ def show_borrowers():
                         st.rerun()
                 else:
                     st.error("⚠️ Please fill in Name and Phone Number.")
-
     # --- TAB 3: AUDIT & MANAGE ---
         with tab_audit:
             if not df.empty:
