@@ -830,22 +830,24 @@ def render_sidebar():
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
+import uuid # CRITICAL: Fixes the UUID NameError
 
 def show_borrowers():
     """
     Manages borrower profiles. 
-    Transformed for Supabase Multi-tenancy.
+    Fixed for Supabase UUID and RLS compliance.
     """
-    st.markdown("<h2 style='color: #2B3F87;'>👥 Borrowers Management</h2>", unsafe_allow_html=True)
+    # Maintain visual brand color sync from session state
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"<h2 style='color: {brand_color};'>👥 Borrowers Management</h2>", unsafe_allow_html=True)
     
     # 1. FETCH TENANT DATA
-    # Automatically filtered by tenant_id via our get_cached_data helper
     df = get_cached_data("borrowers")
     
     if df.empty:
-        df = pd.DataFrame(columns=["id", "name", "phone", "address", "national_id", "status"])
+        df = pd.DataFrame(columns=["id", "name", "phone", "address", "national_id", "status", "tenant_id"])
 
-    # --- TABS (Logic & Styling Preserved) ---
+    # --- TABS ---
     tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
 
     # --- TAB 1: VIEW ALL ---
@@ -858,7 +860,6 @@ def show_borrowers():
 
         filtered_df = df.copy()
         if not filtered_df.empty:
-            # Ensure columns exist and match Supabase naming (lowercase)
             filtered_df["name"] = filtered_df["name"].astype(str)
             filtered_df["phone"] = filtered_df["phone"].astype(str)
             
@@ -879,15 +880,15 @@ def show_borrowers():
                         <td style="padding:12px;">{r['phone']}</td>
                         <td style="padding:12px; font-size: 11px; color:#666;">{r.get('national_id', 'N/A')}</td>
                         <td style="padding:12px; text-align:center;">
-                            <span style="background:#4A90E2; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
+                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
                         </td>
                     </tr>"""
-                st.markdown(f"<div style='border:2px solid #4A90E2; border-radius:10px; overflow:hidden; margin-top:20px;'><table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'><thead><tr style='background:#4A90E2; color:white; text-align:left;'><th style='padding:12px;'>Borrower Name</th><th style='padding:12px;'>Phone</th><th style='padding:12px;'>National ID</th><th style='padding:12px; text-align:center;'>Status</th></tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'><table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'><thead><tr style='background:{brand_color}; color:white; text-align:left;'><th style='padding:12px;'>Borrower Name</th><th style='padding:12px;'>Phone</th><th style='padding:12px;'>National ID</th><th style='padding:12px; text-align:center;'>Status</th></tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
 
     # --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
-            st.markdown("<h4 style='color: #4A90E2;'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             name = c1.text_input("Full Name*")
             phone = c2.text_input("Phone Number*")
@@ -896,17 +897,25 @@ def show_borrowers():
             
             if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
                 if name and phone:
-                    # In Supabase, we don't need to manually calculate new_id (it's auto-increment)
+                    # FIX: Generate a valid UUID to prevent "invalid input syntax" error
+                    new_id = str(uuid.uuid4())
+                    
+                    # FIX: Explicitly include tenant_id to satisfy Supabase RLS policies
                     new_entry = pd.DataFrame([{
+                        "id": new_id, 
                         "name": name, 
                         "phone": phone, 
                         "national_id": nid, 
                         "address": addr, 
                         "status": "Active",
-                        "tenant_id": st.session_state.tenant_id
+                        "tenant_id": st.session_state.get('tenant_id') 
                     }])
+                    
                     if save_data("borrowers", new_entry):
-                        st.success(f"✅ {name} registered!"); st.rerun()
+                        st.success(f"✅ {name} registered!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ Please fill in Name and Phone Number.")
 
     # --- TAB 3: AUDIT & MANAGE ---
     with tab_audit:
@@ -918,7 +927,6 @@ def show_borrowers():
             u_loans = get_cached_data("loans")
             
             if not u_loans.empty:
-                # Filter for this specific borrower within the tenant's loans
                 user_loans = u_loans[u_loans["borrower"] == target_name].copy()
                 if not user_loans.empty:
                     st.metric("Total Loans Found", len(user_loans))
@@ -940,33 +948,34 @@ def show_borrowers():
                     e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
                     
                     if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
-                        # Create a single-row dataframe for the update
                         update_df = pd.DataFrame([{
-                            "id": b_data['id'], # Primary key for upsert
+                            "id": b_data['id'], # Primary key for upsert logic in save_data
                             "name": e_name,
                             "phone": e_phone,
                             "national_id": e_nid,
                             "email": e_email,
                             "status": e_status,
                             "address": e_addr,
-                            "tenant_id": st.session_state.tenant_id
+                            "tenant_id": st.session_state.get('tenant_id')
                         }])
                         
                         if save_data("borrowers", update_df):
-                            st.success("✅ Profile updated!"); st.rerun()
+                            st.success("✅ Profile updated!")
+                            st.rerun()
 
             # --- DELETE ACTION ---
             st.markdown("### ⚠️ Danger Zone")
             if st.button(f"🗑️ Delete {target_name} Permanently", key=f"del_btn_{target_name}"):
-                # Check for active loans before deleting
                 has_loans = not u_loans[u_loans["borrower"] == target_name].empty if not u_loans.empty else False
 
                 if has_loans:
                     st.error("❌ Cannot delete! Borrower has active loan records.")
                 else:
                     try:
+                        # RLS also applies to DELETE; ensure session_state.tenant_id is active
                         supabase.table("borrowers").delete().eq("id", b_data['id']).execute()
-                        st.warning(f"⚠️ {target_name} removed."); st.rerun()
+                        st.warning(f"⚠️ {target_name} removed.")
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -2314,49 +2323,52 @@ def show_settings():
     st.divider()
 
     # --- SAVE ACTION ---
-    if st.button("💾 Save Branding Changes", use_container_width=True):
-        # 1. Initialize update dictionary with the chosen color
-        updated_data = {"brand_color": new_color} 
-        
-        # 2. Handle logo upload to Supabase Storage if a new file is present
-        if logo_file:
-            try:
-                import time
-                bucket_name = 'company-logos'
-                # Path includes ID to ensure unique storage per tenant
-                file_path = f"logos/{active_company['id']}_logo.png"
-                
-                # Upload with Content-Type to ensure it renders as an image
-                supabase.storage.from_(bucket_name).upload(
-                    path=file_path, 
-                    file=logo_file.getvalue(),
-                    file_options={
-                        "x-upsert": "true", 
-                        "content-type": "image/png"
-                    }
-                )
-                
-                # Get and store the public URL
-                public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                updated_data["logo_url"] = public_url
-                
-            except Exception as e:
-                st.error(f"❌ Storage Error: {str(e)}")
-                return # Stop if upload fails
-
-        # 3. Update Database record for this tenant
+# Ensure 'new_color' and 'logo_file' are defined before this button
+if st.button("💾 Save Branding Changes", use_container_width=True):
+    import time  # Standard import to handle the rerun delay
+    
+    # 1. Initialize update dictionary with the chosen color
+    # Syncing with the variable used in your color picker
+    updated_data = {"brand_color": new_color} 
+    
+    # 2. Handle logo upload to Supabase Storage if a new file is present
+    if logo_file:
         try:
-            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+            bucket_name = 'company-logos'
+            # Path includes ID to ensure unique storage per tenant
+            file_path = f"logos/{active_company['id']}_logo.png"
             
-            # 4. SYNC MASTER SWITCH: Update session state so UI changes immediately
-            st.session_state['theme_color'] = new_color
+            # Upload with Content-Type to ensure it renders as an image
+            supabase.storage.from_(bucket_name).upload(
+                path=file_path, 
+                file=logo_file.getvalue(),
+                file_options={
+                    "x-upsert": "true", 
+                    "content-type": "image/png"
+                }
+            )
             
-            st.success("✅ Branding updated successfully!")
-            time.sleep(1) # Ensure imports match top of script
-            st.rerun() # Forces the router and sidebar to redraw with new styles
+            # Get and store the public URL
+            public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+            updated_data["logo_url"] = public_url
             
         except Exception as e:
-            st.error(f"❌ Database Error: {str(e)}")
+            st.error(f"❌ Storage Error: {str(e)}")
+            st.stop() # Prevents database update if upload fails
+
+    # 3. Update Database record for this tenant
+    try:
+        supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+        
+        # 4. SYNC MASTER SWITCH: Update session state so UI changes immediately
+        st.session_state['theme_color'] = new_color
+        
+        st.success("✅ Branding updated successfully!")
+        time.sleep(1) 
+        st.rerun() # Forces the router and sidebar to redraw with new styles
+        
+    except Exception as e:
+        st.error(f"❌ Database Error: {str(e)}")
 
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
