@@ -43,20 +43,21 @@ def apply_custom_theme(color):
         </style>
     """, unsafe_allow_html=True)
 
-def get_logo():
-    """Fetches the logo URL with a cache-buster to ensure the bucket 'talks' to the UI."""
-    tenant_id = st.session_state.get('tenant_id')
-    if tenant_id:
-        try:
-            # Added 'logos/' prefix to match your upload path
-            file_path = f"logos/{tenant_id}_logo.png"
-            res = supabase.storage.from_('company-logos').get_public_url(file_path)
-            
-            # The cache-buster is perfect, keep that!
-            return f"{res}?t={int(time.time())}"
-        except Exception as e:
-            return None
-    return None
+def upload_image(file):
+    """Uploads collateral image to Supabase Storage and returns the public URL."""
+    try:
+        bucket_name = 'collateral-photos'
+        file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
+        
+        # Upload the file
+        supabase.storage.from_(bucket_name).upload(file_name, file.getvalue())
+        
+        # Get public URL
+        res = supabase.storage.from_(bucket_name).get_public_url(file_name)
+        return res
+    except Exception as e:
+        st.error(f"Image upload failed: {str(e)}")
+        return None
 # ==========================================
 # 1. SUPABASE CONNECTION
 # ==========================================
@@ -849,20 +850,21 @@ def get_current_theme():
         pass
     return {'brand_color': '#2B3F87', 'name': 'Zoe Consults'}
 
-def get_logo():
-    """Downloads logo from 'company-logos' based on the path in 'tenants' table."""
+def upload_image(file):
+    """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
-        tenant_id = st.session_state.get("tenant_id")
-        res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
+        bucket_name = 'collateral-photos'
+        file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
         
-        if res.data and res.data[0].get("logo_url"):
-            file_path = res.data[0]["logo_url"]
-            file_data = supabase.storage.from_('company-logos').download(file_path)
-            b64 = base64.b64encode(file_data).decode()
-            return f"data:image/png;base64,{b64}"
-    except Exception:
+        # Upload the file
+        supabase.storage.from_(bucket_name).upload(file_name, file.getvalue())
+        
+        # Get public URL
+        res = supabase.storage.from_(bucket_name).get_public_url(file_name)
+        return res
+    except Exception as e:
+        st.error(f"Image upload failed: {str(e)}")
         return None
-    return None
 
 # ==========================================
 # 17. SIDEBAR & NAVIGATION (STABLE & REACTIVE)
@@ -917,34 +919,55 @@ def render_sidebar():
             st.warning("No tenants available.")
             st.stop() 
 
-        # 4. LOGO DISPLAY
-        col_left, col_mid, col_right = st.columns([1, 2, 1])
+        # --- 2. CENTERED LOGO (Correctly Indented) ---
+        _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            logo_path = active_company.get('logo_url')
-            if logo_path:
+            if active_company.get('logo_url'):
+                # Added timestamp to force refresh if the logo was recently updated
                 import time
-                if str(logo_path).startswith("http"):
-                    final_url = logo_path
-                else:
-                    # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase ID
-                    project_id = "YOUR_PROJECT_ID" 
-                    bucket = "company-logos"
-                    final_url = f"https://{project_id}.supabase.co/storage/v1/object/public/{bucket}/{logo_path}"
-                
-                st.image(f"{final_url}?t={int(time.time())}", width=80)
+                logo_url = active_company['logo_url']
+                st.image(f"{logo_url}?t={int(time.time())}", width=80)
             else:
-                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
+                st.write("🌍")
 
-        # 5. USER INFO
-        st.markdown(f"""
-            <div style="text-align: center; margin-bottom: 20px;">
-                <small style="color: rgba(255,255,255,0.8);">{st.session_state.get('user_email', 'User')}</small>
+        # --- 3. CENTERED INFO BOX (Correctly Indented) ---
+        st.markdown(
+            f"""
+            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
+                        padding: 10px; border-radius: 10px; margin-top: 10px;">
+                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company['name']}</b></span>
             </div>
-        """, unsafe_allow_html=True)
+            """, 
+            unsafe_allow_html=True
+        )
         
         st.divider()
 
         # 6. NAVIGATION MENU (Inside Sidebar Block)
+        menu = {
+            "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
+            "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
+            "Payroll": "💳", "Expenses": "📉", "Petty Cash": "🪙", 
+            "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
+        }
+        menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+        
+        # Maintain page selection state
+        current_p = st.session_state.get('current_page', "Overview")
+        try:
+            default_ix = list(menu.keys()).index(current_p)
+        except ValueError:
+            default_ix = 0
+
+        selection = st.radio("Navigation", menu_options, index=default_ix, label_visibility="collapsed")
+        
+        st.divider()
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+            
+    # Return selection to the Main Router (Outside the 'with' block)
+    return selection.split(" ", 1)[1] if " " in selection else selection
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
             "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
@@ -2435,66 +2458,42 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        
-        # LOGO DISPLAY LOGIC
-        logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
-        
-        if logo_file:
-            # INSTANT PREVIEW (Fixes your failure icons)
-            st.image(logo_file, width=150, caption="Preview of Uploaded Logo")
-        elif active_company.get('logo_url'):
-            # Fetch public URL construction
-            # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase reference
-            proj_id = "YOUR_PROJECT_ID"
-            db_logo = active_company['logo_url']
-            
-            # Check if it's already a full URL or just a path
-            if db_logo.startswith("http"):
-                full_url = db_logo
-            else:
-                full_url = f"https://{proj_id}.supabase.co/storage/v1/object/public/company-logos/{db_logo}"
-            
-            import time
-            st.image(f"{full_url}?t={int(time.time())}", width=150, caption="Current Logo")
+        # Show the current logo as a thumbnail if it exists
+        if active_company.get('logo_url'):
+            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
         else:
             st.caption("No logo uploaded yet.")
+            
+        logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
         updated_data = {"brand_color": new_color}
         
-        # Correctly indented inside the button click logic
+        # Handle logo upload to Supabase Storage
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                file_ext = logo_file.name.split('.')[-1]
-                # Clean path: storing in the 'logos' folder
-                clean_path = f"logos/{tenant_id}_logo.{file_ext}"
+                # Clean the path
+                file_path = f"logos/{active_company['id']}_logo.png"
                 
-                # UPLOAD / UPSERT
+                # --- THE FIX: ADD CONTENT-TYPE ---
                 supabase.storage.from_(bucket_name).upload(
-                    path=clean_path,
+                    path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": f"image/{file_ext}"
+                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
                     }
                 )
-                # Store the relative path for the sidebar to find
-                updated_data["logo_url"] = clean_path
+                
+                # Retrieve public URL
+                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                updated_data["logo_url"] = logo_url
                 
             except Exception as e:
-                # Fallback for update if upload fails on specific duplicate errors
-                try:
-                    supabase.storage.from_(bucket_name).update(
-                        path=clean_path,
-                        file=logo_file.getvalue()
-                    )
-                    updated_data["logo_url"] = clean_path
-                except Exception as e2:
-                    st.error(f"❌ Storage Error: {str(e2)}")
-                    st.stop()
-
+                st.error(f"❌ Storage Error: {str(e)}")
+                st.stop()
         # Update Database & Session State (indented inside the button click)
         try:
             supabase.table("tenants").update(updated_data).eq("id", tenant_id).execute()
