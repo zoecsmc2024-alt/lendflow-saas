@@ -869,53 +869,43 @@ def upload_image(file):
 
 
 # --- 4. AUTH & SIDEBAR NAVIGATION ---
-companies_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
-company_list = {c['name']: c for c in tenants_res.data}
 
-# Initialize session state BEFORE the UI elements
-if 'current_page' not in st.session_state:
-    st.session_state.current_page = "📈 Overview"
+def render_sidebar():
+    # 1. Fetch All Tenants (Unified)
+    try:
+        tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
+        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
+    except Exception as e:
+        st.error(f"Error fetching tenants: {e}")
+        tenant_map = {}
 
-with st.sidebar:
-    # --- STEP 0: DEFINE THE COMPANY FIRST (CRITICAL) ---
-    # This ensures active_company exists before anything else tries to use it.
-    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
-    active_company = company_list[active_company_name]
+    # Initialize session state BEFORE the UI elements
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "Overview"
     
-    # Apply theme based on the selection
-    apply_custom_theme(active_company['brand_color'])
+    current_tenant_id = st.session_state.get('tenant_id')
 
-    # --- 1. CSS INJECTION FOR CENTERING ---
-    st.markdown(
-        """
-        <style>
-            /* Centers the entire sidebar content area */
-            [data-testid="stSidebarNav"] { text-align: center; }
-            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
-            
-            /* Targets the radio group container */
-            div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
-            
-            /* Centers the text within each radio button label */
-            div.row-widget.stRadio > div[role="radiogroup"] > label { 
-                justify-content: center; 
-                width: 100%; 
-                text-align: center; 
-            }
-            
-            /* Ensures the top-level label is also centered */
-            [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
-            
-            /* Optional: Hide the radio circles to make it look like a clean menu */
-            [data-testid="stMarkdownContainer"] p { font-weight: 500; }
-        </style>
-        """, 
-        unsafe_allow_html=True
-    )
-
-    # --- THE SIDEBAR RENDER ---
     with st.sidebar:
-        # 3. TENANT SELECTION
+        # --- 1. CSS INJECTION FOR CENTERING ---
+        st.markdown(
+            """
+            <style>
+                [data-testid="stSidebarNav"] { text-align: center; }
+                [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
+                div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
+                div.row-widget.stRadio > div[role="radiogroup"] > label { 
+                    justify-content: center; 
+                    width: 100%; 
+                    text-align: center; 
+                }
+                [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
+                [data-testid="stMarkdownContainer"] p { font-weight: 500; }
+            </style>
+            """, 
+            unsafe_allow_html=True
+        )
+
+        # --- 2. TENANT SELECTION (STEP 0: DEFINE COMPANY FIRST) ---
         if tenant_map:
             options = list(tenant_map.keys())
             default_index = 0
@@ -928,9 +918,11 @@ with st.sidebar:
             active_company_name = st.selectbox("Business Portal:", options, index=default_index)
             active_company = tenant_map[active_company_name]
             
+            # Update session and apply theme
             if st.session_state.get('tenant_id') != active_company['id']:
                 st.session_state['tenant_id'] = active_company['id']
                 st.session_state['theme_color'] = active_company['brand_color']
+                # apply_custom_theme(active_company['brand_color']) # Call your theme function here
                 st.rerun()
         else:
             st.warning("No tenants available.")
@@ -940,26 +932,19 @@ with st.sidebar:
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
             logo_val = active_company.get('logo_url')
-            
             if logo_val and logo_val != "0":
                 import time
-                # Check if it's already a full URL or just a filename
                 if str(logo_val).startswith("http"):
                     final_logo_url = logo_val
                 else:
-                    # Replace 'YOUR_PROJECT_ID' with your actual Supabase Project ID
-                    # Ensure the bucket name 'company-logos' matches your Supabase Storage
-                    project_id = "YOUR_PROJECT_ID" 
+                    project_id = "YOUR_PROJECT_ID" # Replace with your actual ID
                     final_logo_url = f"https://{project_id}.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
                 
                 try:
-                    # The ?t= timestamp prevents the 'broken' image from being cached
                     st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
                 except Exception:
-                    # If the URL is still invalid, show a building icon instead of crashing
                     st.markdown("<h2 style='text-align: center;'>🏢</h2>", unsafe_allow_html=True)
             else:
-                # Default icon if no logo is found
                 st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
         # --- 5. INFO BOX ---
@@ -976,7 +961,7 @@ with st.sidebar:
         
         st.divider()
 
-        # --- 6. NAVIGATION MENU (Restoring Missing Items) ---
+        # --- 6. NAVIGATION MENU ---
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
             "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
@@ -985,7 +970,6 @@ with st.sidebar:
         }
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         
-        # Determine current selection
         current_p = st.session_state.get('current_page', "Overview")
         try:
             default_ix = list(menu.keys()).index(current_p)
@@ -998,7 +982,8 @@ with st.sidebar:
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
-            # 7. Final Return (Outside the 'with' block)
+
+    # --- 7. FINAL RETURN (Outside the 'with' block) ---
     return selection.split(" ", 1)[1] if " " in selection else selection
         
 # ==============================
