@@ -22,7 +22,8 @@ from supabase import create_client
 import streamlit as st
 import pandas as pd
 import time  # Fixes local variable 'time' error
-
+# --- CONFIGURATION (Add this!) ---
+SESSION_TIMEOUT = 30
 
 def apply_master_theme():
     """Applies the dynamic theme based on the current session state."""
