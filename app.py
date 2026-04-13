@@ -28,45 +28,44 @@ import time
 
 def apply_master_theme():
     """
-    Applies the theme globally. Priority:
-    1. Instant session state (from settings/sidebar selection)
-    2. Fallback to default blue
+    Applies the theme globally using session state. 
+    This is the only place CSS should be injected for branding.
     """
-    # Force a refresh of the color variable from session state
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    # Force the color from session state. If missing, use a safe default blue.
+    brand_color = st.session_state.get("theme_color", "#1E3A8A")
     
     st.markdown(f"""
-    <style>
-        /* MAIN SIDEBAR BACKGROUND */
-        [data-testid="stSidebar"], section[data-testid="stSidebar"] {{
-            background-color: {brand_color} !important;
-            min-width: 260px !important;
-        }}
+        <style>
+            /* 1. SIDEBAR BACKGROUND */
+            [data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
+            
+            /* 2. SIDEBAR TEXT - Forced to White */
+            [data-testid="stSidebar"] *, 
+            [data-testid="stSidebarNav"] span,
+            [data-testid="stSidebar"] p,
+            [data-testid="stSidebar"] b {{
+                color: white !important;
+            }}
 
-        /* SIDEBAR TEXT & ICONS - Forced White */
-        [data-testid="stSidebar"] *, 
-        [data-testid="stSidebarNav"] span,
-        [data-testid="stSidebar"] b,
-        [data-testid="stSidebar"] p {{
-            color: #FFFFFF !important;
-        }}
+            /* 3. METRIC CARDS - Synced with Brand Color */
+            div[data-testid="stMetric"] {{
+                background-color: white !important; 
+                padding: 15px !important; 
+                border-radius: 10px !important;
+                border-left: 5px solid {brand_color} !important; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+            }}
+            
+            /* 4. MAIN PAGE HEADINGS */
+            h1, h2, h3 {{ color: {brand_color} !important; }}
 
-        /* METRIC CARDS SYNC */
-        div[data-testid="stMetric"] {{
-            background-color: #FFFFFF !important;
-            border-left: 8px solid {brand_color} !important; 
-            border-radius: 12px !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-        }}
-
-        /* HEADINGS & BUTTONS SYNC */
-        h1, h2, h3 {{ color: {brand_color} !important; }}
-        
-        /* Fix for selectbox text visibility inside sidebar */
-        [data-testid="stSidebar"] div[data-baseweb="select"] * {{
-            color: #1E3A8A !important;
-        }}
-    </style>
+            /* 5. SELECTBOX FIX - Ensure dropdown text is readable */
+            [data-testid="stSidebar"] div[data-baseweb="select"] * {{
+                color: #1E3A8A !important;
+            }}
+        </style>
     """, unsafe_allow_html=True)
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
@@ -227,34 +226,7 @@ def save_data(table_name, dataframe):
         st.error(f"❌ Error saving to {table_name}: {e}")
         return False
 
-# ==========================================
-# 7. SECURITY & SESSION MANAGEMENT (STYLING FIX)
-# ==========================================
-from datetime import datetime, timedelta
 
-SESSION_TIMEOUT = 15  # Minutes
-
-# --- GLOBAL UI SYNC ---
-def sync_tenant_ui():
-    tenant_id = st.session_state.get('tenant_id')
-    if not tenant_id:
-        return None
-
-    try:
-        # Fetch fresh data from DB
-        res = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
-        if res.data:
-            branding = res.data[0]
-            
-            # If we don't have a "live" change in progress, sync from DB
-            if 'theme_color' not in st.session_state:
-                st.session_state['theme_color'] = branding.get('brand_color', '#2B3F87')
-            
-            apply_master_theme()
-            return branding
-    except Exception as e:
-        print(f"Sync error: {e}")
-    return None
 # ==========================================
 # PASSWORD VERIFICATION (LEGACY SUPPORT)
 # ==========================================
@@ -2507,71 +2479,57 @@ def show_dashboard_view():
 # ==========================================
 
 if __name__ == "__main__":
-    # 1. Load the Theme FIRST
-    apply_ui_theme() 
-    
+    # 1. AUTH CHECK
     if not st.session_state.get("logged_in"):
+        # Reset to default for login screen
+        st.session_state['theme_color'] = "#1E3A8A"
+        apply_master_theme() 
         run_auth_ui(supabase)
     else:
-        # Check if the user is still active
+        # 2. SESSION TIMEOUT CHECK
         check_session_timeout()
         
-        # Draw the sidebar and get the current selection 
-        # Integration Fix: render_sidebar now returns the 'page'
+        # 3. RUN SIDEBAR FIRST (The Brain)
+        # This function updates st.session_state['theme_color']
         page = render_sidebar()
         
-        # Save the current page to session state 
+        # 4. APPLY THEME SECOND (The Paint)
+        # This now sees the updated color from the sidebar
+        apply_master_theme()
+        
+        # 5. SAVE PAGE STATE
         st.session_state['current_page'] = page
 
+        # 6. ROUTE TO CONTENT
         try:
-            # Main workboard area
-            main_container = st.container()
-            
-            with main_container:
+            main_area = st.container()
+            with main_area:
                 if page == "Settings":
-                    show_settings()
-                
+                    show_settings() # Ensure your settings "Save" button calls st.rerun()
                 elif page == "Overview":
                     show_dashboard_view()
-                    
                 elif page == "Loans":
-                    show_loans() 
-                    
+                    show_loans()
                 elif page == "Borrowers":
                     show_borrowers()
-
                 elif page == "Collateral":
                     show_collateral()
-
                 elif page == "Calendar":
                     show_calendar()
-
                 elif page == "Ledger":
                     show_ledger()
-
                 elif page == "Overdue Tracker":
                     show_overdue_tracker()
-
                 elif page == "Payments":
                     show_payments()
-                    
                 elif page == "Expenses":
                     show_expenses()
-                    
-                elif page == "Petty Cash": # Fixed spacing to match menu
+                elif page == "Petty Cash":
                     show_petty_cash()
-                    
                 elif page == "Payroll":
                     show_payroll()
-
-                elif page == "Reports":
-                    show_reports()
-                    
                 else:
                     st.info(f"The {page} module is coming online soon.")
 
-        except NameError as e:
-            st.error("🚨 **Mapping Error!**")
-            st.warning(f"Python can't find the function: {e}")
         except Exception as e:
-            st.error(f"Something went wrong: {e}")
+            st.error(f"Application Error: {e}")
