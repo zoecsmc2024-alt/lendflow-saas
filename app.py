@@ -968,30 +968,7 @@ def render_sidebar():
             
     # Return selection to the Main Router (Outside the 'with' block)
     return selection.split(" ", 1)[1] if " " in selection else selection
-        menu = {
-            "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
-            "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
-            "Payroll": "💳", "Expenses": "📉", "Petty Cash": "🪙", 
-            "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
-        }
-        menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         
-        # Helper to find current index
-        current_p = st.session_state.get('current_page', "Overview")
-        try:
-            default_ix = list(menu.keys()).index(current_p)
-        except:
-            default_ix = 0
-
-        selection = st.radio("Navigation", menu_options, index=default_ix, label_visibility="collapsed")
-        
-        st.divider()
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
-            
-    # Final Return (Outside the 'with' block)
-    return selection.split(" ", 1)[1] if " " in selection else selection
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
