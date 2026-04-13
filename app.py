@@ -858,7 +858,9 @@ def show_borrowers():
         with col2:
             status_filter = st.selectbox("Filter Status", ["All", "Active", "Inactive"], key="bor_status_filt")
 
+        # Ensure 'df' is your borrowers dataframe
         filtered_df = df.copy()
+        
         if not filtered_df.empty:
             filtered_df["name"] = filtered_df["name"].astype(str)
             filtered_df["phone"] = filtered_df["phone"].astype(str)
@@ -874,17 +876,38 @@ def show_borrowers():
                 rows_html = ""
                 for i, r in filtered_df.reset_index().iterrows():
                     bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                    # We use .get() to avoid "KeyError" if a column is missing
+                    n_id = r.get('national_id', 'N/A')
+                    
                     rows_html += f"""
                     <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
                         <td style="padding:12px;"><b>{r['name']}</b></td>
                         <td style="padding:12px;">{r['phone']}</td>
-                        <td style="padding:12px; font-size: 11px; color:#666;">{r.get('national_id', 'N/A')}</td>
+                        <td style="padding:12px; font-size: 11px; color:#666;">{n_id}</td>
                         <td style="padding:12px; text-align:center;">
                             <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
                         </td>
                     </tr>"""
-                st.markdown(f"<div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'><table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'><thead><tr style='background:{brand_color}; color:white; text-align:left;'><th style='padding:12px;'>Borrower Name</th><th style='padding:12px;'>Phone</th><th style='padding:12px;'>National ID</th><th style='padding:12px; text-align:center;'>Status</th></tr></thead><tbody>{rows_html}</tbody></table></div>", unsafe_allow_html=True)
-
+                
+                table_header = f"""
+                <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
+                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
+                        <thead>
+                            <tr style='background:{brand_color}; color:white; text-align:left;'>
+                                <th style='padding:12px;'>Borrower Name</th>
+                                <th style='padding:12px;'>Phone</th>
+                                <th style='padding:12px;'>National ID</th>
+                                <th style='padding:12px; text-align:center;'>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows_html}</tbody>
+                    </table>
+                </div>"""
+                st.markdown(table_header, unsafe_allow_html=True)
+            else:
+                st.info("No borrowers found matching your search.")
+        else:
+            st.info("No borrowers registered yet.")
     # --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
