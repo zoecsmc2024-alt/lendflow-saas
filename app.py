@@ -2246,19 +2246,15 @@ import streamlit as st
 import time
 
 # ==========================================
-# 23. SETTINGS & BRANDING PAGE (FULLY SYNCED)
+# 23. SETTINGS & BRANDING PAGE
 # ==========================================
 
 def show_settings():
     """
     Manages tenant identity and UI branding.
-    Synchronized with 'tenants' table columns: id, company_code, name, brand_color, logo_url
+    Only displays when the 'Settings' page is selected.
     """
-    # Use the session state color for the header to maintain visual sync
-    header_color = st.session_state.get("theme_color", "#2B3F87")
-    st.markdown(f"<h2 style='color: {header_color};'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
-    
-    # 1. FETCH OR INITIALIZE TENANT INFO
+    # 1. FETCH FRESH TENANT DATA
     try:
         tenant_id = st.session_state.get("tenant_id")
         
@@ -2266,26 +2262,23 @@ def show_settings():
             st.warning("⚠️ No active tenant detected. Please log in.")
             return
 
-        # Fetch fresh data from database
+        # Always pull fresh data so we have the latest logo_url and brand_color
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         
         if not tenant_resp.data:
-            new_tenant = {
-                "id": tenant_id,
-                "name": "Zoe Consults Client",
-                "company_code": "NEW_USER",
-                "brand_color": "#2B3F87",
-                "logo_url": None
-            }
-            supabase.table("tenants").insert(new_tenant).execute()
-            active_company = new_tenant
-        else:
-            active_company = tenant_resp.data[0]
+            st.error("❌ Business profile not found.")
+            return
+            
+        active_company = tenant_resp.data[0]
 
     except Exception as e:
         st.error(f"❌ Connection Error: {e}")
         return
 
+    # Dynamic Header Color based on Session State
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"<h2 style='color: {brand_color};'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
+    
     # --- BUSINESS IDENTITY SECTION ---
     st.subheader("🏢 Business Identity")
     col1, col2 = st.columns([2, 1])
@@ -2293,7 +2286,7 @@ def show_settings():
     with col1:
         st.markdown(f"**Current Business Name:** {active_company['name']}")
         
-        # Consistent variable naming to prevent NameErrors
+        # Color Picker - Standardized variable name 'new_color'
         new_color = st.color_picker(
             "🎨 Change Brand Color", 
             active_company.get('brand_color', '#2B3F87'),
@@ -2310,7 +2303,7 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        # Show current logo with cache-busting timestamp to fix MediaFileStorageError
+        # Show current logo with cache-busting timestamp
         if active_company.get('logo_url'):
             import time
             logo_display_url = f"{active_company['logo_url']}?t={int(time.time())}"
@@ -2323,53 +2316,49 @@ def show_settings():
     st.divider()
 
     # --- SAVE ACTION ---
-# Ensure 'new_color' and 'logo_file' are defined before this button
-if st.button("💾 Save Branding Changes", use_container_width=True):
-    import time  # Standard import to handle the rerun delay
-    
-    # 1. Initialize update dictionary with the chosen color
-    # Syncing with the variable used in your color picker
-    updated_data = {"brand_color": new_color} 
-    
-    # 2. Handle logo upload to Supabase Storage if a new file is present
-    if logo_file:
+    if st.button("💾 Save Branding Changes", use_container_width=True):
+        import time 
+        
+        # 1. Prepare data for update
+        updated_data = {"brand_color": new_color} 
+        
+        # 2. Handle logo upload if a new file exists
+        if logo_file:
+            try:
+                bucket_name = 'company-logos'
+                file_path = f"logos/{active_company['id']}_logo.png"
+                
+                # Upload to Supabase Storage
+                supabase.storage.from_(bucket_name).upload(
+                    path=file_path, 
+                    file=logo_file.getvalue(),
+                    file_options={
+                        "x-upsert": "true", 
+                        "content-type": "image/png"
+                    }
+                )
+                
+                # Retrieve Public URL
+                public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                updated_data["logo_url"] = public_url
+                
+            except Exception as e:
+                st.error(f"❌ Storage Error: {str(e)}")
+                st.stop()
+
+        # 3. Update the 'tenants' table in Supabase
         try:
-            bucket_name = 'company-logos'
-            # Path includes ID to ensure unique storage per tenant
-            file_path = f"logos/{active_company['id']}_logo.png"
+            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
             
-            # Upload with Content-Type to ensure it renders as an image
-            supabase.storage.from_(bucket_name).upload(
-                path=file_path, 
-                file=logo_file.getvalue(),
-                file_options={
-                    "x-upsert": "true", 
-                    "content-type": "image/png"
-                }
-            )
+            # 4. SYNC MASTER SWITCH: Update session state for instant UI change
+            st.session_state['theme_color'] = new_color
             
-            # Get and store the public URL
-            public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-            updated_data["logo_url"] = public_url
+            st.success("✅ Branding updated successfully!")
+            time.sleep(1) 
+            st.rerun() # Refresh app to apply the new color everywhere
             
         except Exception as e:
-            st.error(f"❌ Storage Error: {str(e)}")
-            st.stop() # Prevents database update if upload fails
-
-    # 3. Update Database record for this tenant
-    try:
-        supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
-        
-        # 4. SYNC MASTER SWITCH: Update session state so UI changes immediately
-        st.session_state['theme_color'] = new_color
-        
-        st.success("✅ Branding updated successfully!")
-        time.sleep(1) 
-        st.rerun() # Forces the router and sidebar to redraw with new styles
-        
-    except Exception as e:
-        st.error(f"❌ Database Error: {str(e)}")
-
+            st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
 # ==========================================
