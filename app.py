@@ -979,20 +979,17 @@ def show_borrowers():
             
             if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
                 if name and phone:
-                    # FIX: Generate a valid UUID
                     new_id = str(uuid.uuid4())
-                    
-                    # FIX: Fallback for tenant_id
-                    t_id = "test-tenant-123"
+                    t_id = st.session_state.get('tenant_id', 'test-tenant-123')
                     
                     new_entry = pd.DataFrame([{
                         "id": new_id, 
                         "name": name, 
                         "phone": phone, 
-                        "email": email,           # ADDED
+                        "email": email,
                         "national_id": nid, 
                         "address": addr, 
-                        "next_of_kin": nok,       # ADDED
+                        "next_of_kin": nok,
                         "status": "Active",
                         "tenant_id": t_id 
                     }])
@@ -1002,51 +999,72 @@ def show_borrowers():
                         st.rerun()
                 else:
                     st.error("⚠️ Please fill in Name and Phone Number.")
-        with tab_audit:
-            if not df.empty:
-                target_name = st.selectbox("Select Borrower to Audit/Manage", df["name"].tolist(), key="audit_manage_select")
-                b_data = df[df["name"] == target_name].iloc[0]
+
+    # --- TAB 3: AUDIT & MANAGE ---
+    with tab_audit:
+        if not df.empty:
+            # Dynamically find the name column in the borrowers dataframe
+            b_name_col = next((c for c in df.columns if 'name' in c.lower()), df.columns[0])
+            b_status_col = next((c for c in df.columns if 'status' in c.lower()), 'status')
+            
+            target_name = st.selectbox("Select Borrower to Audit/Manage", df[b_name_col].tolist(), key="audit_manage_select")
+            b_data = df[df[b_name_col] == target_name].iloc[0]
+            
+            # SHOW LOAN HISTORY
+            u_loans = get_cached_data("loans")
+            
+            if not u_loans.empty:
+                # FIX: Standardize loans columns and find the borrower reference
+                u_loans.columns = u_loans.columns.str.strip().str.lower().str.replace(" ", "_")
                 
-                # SHOW LOAN HISTORY
-                u_loans = get_cached_data("loans")
+                # Look for 'borrower', 'borrower_id', or 'borrower_name' in the LOANS table
+                loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c), None)
                 
-                if not u_loans.empty:
-                    user_loans = u_loans[u_loans["borrower"] == target_name].copy()
+                if loan_bor_ref:
+                    # Filter loans by matching the borrower reference to the target name
+                    user_loans = u_loans[u_loans[loan_bor_ref].astype(str) == str(target_name)].copy()
+                    
                     if not user_loans.empty:
                         st.metric("Total Loans Found", len(user_loans))
-                        st.table(user_loans[["id", "status", "principal", "end_date"]])
+                        # Select only available columns to avoid display errors
+                        cols_to_show = [c for c in ["id", "status", "principal", "end_date"] if c in user_loans.columns]
+                        st.table(user_loans[cols_to_show])
                     else:
                         st.info("ℹ️ No loans recorded for this borrower yet.")
+                else:
+                    st.warning("Could not find a borrower reference column in the loans table.")
 
-                st.markdown("---")
-                st.markdown("### ⚙️ Modify Borrower Details")
-                
-                with st.expander(f"📝 Edit Profile: {target_name}"):
-                    with st.form(f"edit_bor_{target_name}"):
-                        c1, c2 = st.columns(2)
-                        e_name = c1.text_input("Full Name", value=str(b_data['name']))
-                        e_phone = c1.text_input("Phone Number", value=str(b_data['phone']))
-                        e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
-                        e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
-                        e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if b_data['status'] == "Active" else 1)
-                        e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
+            st.markdown("---")
+            st.markdown("### ⚙️ Modify Borrower Details")
+            
+            with st.expander(f"📝 Edit Profile: {target_name}"):
+                with st.form(f"edit_bor_{target_name}"):
+                    c1, c2 = st.columns(2)
+                    e_name = c1.text_input("Full Name", value=str(b_data.get(b_name_col, '')))
+                    e_phone = c1.text_input("Phone Number", value=str(b_data.get('phone', '')))
+                    e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
+                    e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
+                    
+                    # Safe status index check
+                    current_status = str(b_data.get(b_status_col, 'Active')).title()
+                    e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if current_status == "Active" else 1)
+                    e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
+                    
+                    if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
+                        update_df = pd.DataFrame([{
+                            "id": b_data.get('id'), 
+                            "name": e_name,
+                            "phone": e_phone,
+                            "national_id": e_nid,
+                            "email": e_email,
+                            "status": e_status,
+                            "address": e_addr,
+                            "tenant_id": st.session_state.get('tenant_id')
+                        }])
                         
-                        if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
-                            update_df = pd.DataFrame([{
-                                "id": b_data['id'], 
-                                "name": e_name,
-                                "phone": e_phone,
-                                "national_id": e_nid,
-                                "email": e_email,
-                                "status": e_status,
-                                "address": e_addr,
-                                "tenant_id": st.session_state.get('tenant_id')
-                            }])
-                            
-                            if save_data("borrowers", update_df):
-                                st.success("✅ Profile updated!")
-                                st.rerun()
-
+                        if save_data("borrowers", update_df):
+                            st.success("✅ Profile updated!")
+                            st.rerun()
                 # --- DELETE ACTION (Now properly indented) ---
                 st.markdown("### ⚠️ Danger Zone")
                 confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}")
