@@ -1079,7 +1079,12 @@ def show_loans():
             with st.form("loan_issue_form"):
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
-                selected_borrower = col1.selectbox("Select Borrower", active_borrowers["name"].unique())
+                
+                # UPDATE: Map names to IDs so we send the UUID to the database
+                borrower_map = dict(zip(active_borrowers["name"], active_borrowers["id"]))
+                selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
+                selected_id = borrower_map[selected_name] # This is the UUID
+                
                 amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
@@ -1091,10 +1096,15 @@ def show_loans():
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     new_loan = pd.DataFrame([{
-                        "borrower": selected_borrower, "type": l_type,
-                        "principal": float(amount), "interest": (interest_rate/100)*amount,
-                        "total_repayable": float(total_due), "amount_paid": 0.0,
-                        "status": "Active", "start_date": str(date_issued), "end_date": str(date_due),
+                        "borrower_id": selected_id, # FIX: Used correct column name and UUID
+                        "type": l_type,
+                        "principal": float(amount), 
+                        "interest": (interest_rate/100)*amount,
+                        "total_repayable": float(total_due), 
+                        "amount_paid": 0.0,
+                        "status": "Active", 
+                        "start_date": str(date_issued), 
+                        "end_date": str(date_due),
                         "tenant_id": st.session_state.tenant_id
                     }])
                     if save_data("loans", new_loan):
@@ -1109,7 +1119,6 @@ def show_loans():
         if loans_df.empty:
             st.info("No active loans to roll over.")
         else:
-            # Only allow rolling over loans that aren't already closed
             eligible_loans = loans_df[loans_df["status"] != "Closed"]
             
             if eligible_loans.empty:
@@ -1118,9 +1127,9 @@ def show_loans():
                 roll_sel = st.selectbox("Select Loan to Roll Over", eligible_loans["id"].unique())
                 loan_to_roll = eligible_loans[eligible_loans["id"] == roll_sel].iloc[0]
                 
-                st.warning(f"You are rolling over Loan #{roll_sel} for {loan_to_roll['borrower']}")
+                # Fetching name for display, but keeping ID for DB logic
+                st.warning(f"You are rolling over Loan #{roll_sel}")
                 
-                # Calculation for the new "Rolled" Principal
                 current_unpaid = loan_to_roll['balance']
                 new_interest_rate = st.number_input("New Monthly Interest (%)", value=10.0)
                 
@@ -1128,11 +1137,11 @@ def show_loans():
                     # 1. Update old loan to 'Rolled'
                     supabase.table("loans").update({"status": "Rolled"}).eq("id", loan_to_roll['id']).execute()
                     
-                    # 2. Create New Loan Entry (The Next Cycle)
+                    # 2. Create New Loan Entry
                     new_cycle = pd.DataFrame([{
-                        "borrower": loan_to_roll['borrower'],
+                        "borrower_id": loan_to_roll['borrower_id'], # FIX: Used correct column name
                         "type": loan_to_roll['type'],
-                        "principal": float(current_unpaid), # The old balance becomes the new principal
+                        "principal": float(current_unpaid),
                         "interest": float(current_unpaid * (new_interest_rate / 100)),
                         "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
                         "amount_paid": 0.0,
