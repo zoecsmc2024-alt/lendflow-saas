@@ -27,18 +27,19 @@ import streamlit as st
 import time
 
 def apply_custom_theme(color):
+    st.session_state.theme_color = color
     st.markdown(f"""
         <style>
         [data-testid="stSidebar"] {{ background-color: {color} !important; }}
         [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-        
-        /* The old code's Metric Card "Glow-up" */
+        [data-testid="stWidgetLabel"] p {{ color: white !important; }}
+        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
+        ul[data-testid="stSelectboxVirtualList"] * {{ color: #1E3A8A !important; }}
+        .stSelectbox label p {{ color: white !important; }}
         div[data-testid="stMetric"] {{
             background-color: white; padding: 15px; border-radius: 10px;
             border-left: 5px solid {color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }}
-        
-        /* Make the titles match the brand */
         h1, h2, h3 {{ color: {color}; }}
         </style>
     """, unsafe_allow_html=True)
