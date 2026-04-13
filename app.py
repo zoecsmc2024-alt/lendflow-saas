@@ -866,35 +866,7 @@ def upload_image(file):
         st.error(f"Image upload failed: {str(e)}")
         return None
 
-# ==========================================
-# 17. SIDEBAR & NAVIGATION (STABLE & REACTIVE)
-# ==========================================
 
-def render_sidebar():
-    # 1. Fetch All Tenants
-    try:
-        tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
-        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
-    except Exception as e:
-        st.error(f"Error fetching tenants: {e}")
-        tenant_map = {}
-
-    current_tenant_id = st.session_state.get('tenant_id')
-    brand_color = st.session_state.get('theme_color', '#1E3A8A')
-
-    # 2. Apply Dynamic CSS
-    st.markdown(f"""
-        <style>
-            [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
-            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-            h1, h2, h3 {{ color: {brand_color} !important; }}
-            div[data-testid="stMetric"] {{
-                background-color: white; padding: 15px; border-radius: 10px;
-                border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }}
-            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{ color: #31333F !important; }}
-        </style>
-    """, unsafe_allow_html=True)
 
     # ==========================================
 # 17. SIDEBAR & NAVIGATION (STABLE & REACTIVE)
@@ -2491,48 +2463,52 @@ def show_settings():
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-        updated_data = {"brand_color": new_color}
-        
-        # Handle logo upload to Supabase Storage
-        if logo_file:
-            try:
-                bucket_name = 'company-logos'
-                # Clean the path
-                file_path = f"logos/{active_company['id']}_logo.png"
-                
-                # --- THE FIX: ADD CONTENT-TYPE ---
-                supabase.storage.from_(bucket_name).upload(
-                    path=file_path,
-                    file=logo_file.getvalue(),
-                    file_options={
-                        "x-upsert": "true",
-                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
-                    }
-                )
-                
-                # Retrieve public URL
-                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                updated_data["logo_url"] = logo_url
-                
-            except Exception as e:
-                st.error(f"❌ Storage Error: {str(e)}")
-                st.stop()
-        # Update Database & Session State (indented inside the button click)
+    updated_data = {"brand_color": new_color}
+    
+    if logo_file:
         try:
-            supabase.table("tenants").update(updated_data).eq("id", tenant_id).execute()
+            bucket_name = 'company-logos'
+            # We use a consistent path: logos/TENANT_ID.png
+            file_path = f"logos/{active_company['id']}.png"
             
-            # Instant UI feedback for the sidebar
-            st.session_state['theme_color'] = new_color
-            if "logo_url" in updated_data:
-                st.session_state['logo_url'] = updated_data["logo_url"]
+            # 1. Upload to Storage
+            supabase.storage.from_(bucket_name).upload(
+                path=file_path,
+                file=logo_file.getvalue(),
+                file_options={
+                    "x-upsert": "true",
+                    "content-type": "image/png" 
+                }
+            )
             
-            st.success("✅ Branding updated! Refreshing...")
-            import time
-            time.sleep(1)
-            st.rerun()
+            # 2. Get the ACTUAL public URL from Supabase
+            public_url_res = supabase.storage.from_(bucket_name).get_public_url(file_path)
+            
+            # Handle different return types of get_public_url
+            if isinstance(public_url_res, dict):
+                logo_url = public_url_res.get('publicURL')
+            else:
+                logo_url = public_url_res # Some versions return the string directly
+                
+            updated_data["logo_url"] = logo_url
             
         except Exception as e:
-            st.error(f"❌ Database Error: {str(e)}")
+            st.error(f"❌ Storage Error: {str(e)}")
+            st.stop()
+
+    # 3. Update Database
+    try:
+        supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+        
+        # Update Session State so the change is instant
+        st.session_state['theme_color'] = new_color
+        if "logo_url" in updated_data:
+            st.session_state['logo_url'] = updated_data["logo_url"]
+        
+        st.success("✅ Branding updated!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
 # ==========================================
