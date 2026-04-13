@@ -2446,47 +2446,50 @@ def show_dashboard_view():
 # ==========================================
 
 if __name__ == "__main__":
+    # 1. AUTH CHECK
     if not st.session_state.get("logged_in"):
         st.session_state['theme_color'] = "#1E3A8A" # Default login color
         apply_master_theme()
         run_auth_ui(supabase)
     else:
-        check_session_timeout() # Now works because 'timedelta' is imported
+        # 2. SESSION TIMEOUT CHECK
+        check_session_timeout() 
         
-        # FIRST: Determine which company/color is active
+        # 3. FIRST: Determine which company/color is active
+        # render_sidebar() should update st.session_state['theme_color']
         page = render_sidebar()
         
-        # SECOND: Apply the theme using that active color
+        # 4. SECOND: Apply the theme using that active color
         apply_master_theme()
         
-        # THIRD: Show the content
-        if page == "Settings":
-            show_settings() # Ensure your Save button does st.rerun()
-        elif page == "Overview":
-            show_dashboard_view()
-        # ... other pages ...
-                elif page == "Loans":
-                    show_loans()
-                elif page == "Borrowers":
-                    show_borrowers()
-                elif page == "Collateral":
-                    show_collateral()
-                elif page == "Calendar":
-                    show_calendar()
-                elif page == "Ledger":
-                    show_ledger()
-                elif page == "Overdue Tracker":
-                    show_overdue_tracker()
-                elif page == "Payments":
-                    show_payments()
-                elif page == "Expenses":
-                    show_expenses()
-                elif page == "Petty Cash":
-                    show_petty_cash()
-                elif page == "Payroll":
-                    show_payroll()
-                else:
-                    st.info(f"The {page} module is coming online soon.")
-
+        # 5. THIRD: Show the content with correct indentation
+        try:
+            if page == "Settings":
+                show_settings() 
+            elif page == "Overview":
+                show_dashboard_view()
+            elif page == "Loans":
+                show_loans()
+            elif page == "Borrowers":
+                show_borrowers()
+            elif page == "Collateral":
+                show_collateral()
+            elif page == "Calendar":
+                show_calendar()
+            elif page == "Ledger":
+                show_ledger()
+            elif page == "Overdue Tracker":
+                show_overdue_tracker()
+            elif page == "Payments":
+                show_payments()
+            elif page == "Expenses":
+                show_expenses()
+            elif page == "Petty Cash":
+                show_petty_cash()
+            elif page == "Payroll":
+                show_payroll()
+            else:
+                st.info(f"The {page} module is coming online soon.")
+                
         except Exception as e:
             st.error(f"Application Error: {e}")
