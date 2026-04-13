@@ -1573,6 +1573,7 @@ def show_collateral():
         else:
             # This is the ONLY place the 'No collateral' message should appear
             st.info("💡 No collateral registered yet.")
+            
 
             
 
