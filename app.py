@@ -22,43 +22,32 @@ from supabase import create_client
 import streamlit as st
 import pandas as pd
 import time  # Fixes local variable 'time' error
-import time
+
 
 def apply_master_theme():
-    # Priority: 1. Current Session State, 2. Default Branding Blue
+    """Applies the dynamic theme based on the current session state."""
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
     
     st.markdown(f"""
-    <style>
-        /* Sidebar Background */
-        [data-testid="stSidebar"] {{
-            background-color: {brand_color} !important;
-            min-width: 260px !important;
-        }}
-
-        /* Sidebar Text & Nav Icons */
-        [data-testid="stSidebar"] *, 
-        [data-testid="stSidebarNav"] span,
-        [data-testid="stSidebar"] p {{
-            color: #FFFFFF !important;
-        }}
-
-        /* Metric Cards - Linked to Brand Color */
-        div[data-testid="stMetric"] {{
-            background-color: #FFFFFF !important;
-            border-left: 8px solid {brand_color} !important; 
-            border-radius: 12px !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-        }}
-
-        /* Headers and UI Accents */
-        h1, h2, h3 {{ color: {brand_color} !important; }}
-        
-        /* Dropdown text visibility fix */
-        [data-testid="stSidebar"] div[data-baseweb="select"] * {{
-            color: #1E3A8A !important;
-        }}
-    </style>
+        <style>
+            [data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span, [data-testid="stSidebar"] p {{
+                color: white !important;
+            }}
+            div[data-testid="stMetric"] {{
+                background-color: white !important;
+                padding: 15px !important;
+                border-radius: 10px !important;
+                border-left: 5px solid {brand_color} !important;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+            }}
+            h1, h2, h3 {{ color: {brand_color} !important; }}
+            [data-testid="stSidebar"] div[data-baseweb="select"] * {{
+                color: #1E3A8A !important;
+            }}
+        </style>
     """, unsafe_allow_html=True)
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
@@ -2455,14 +2444,13 @@ if __name__ == "__main__":
         # 2. SESSION TIMEOUT CHECK
         check_session_timeout() 
         
-        # 3. FIRST: Determine which company/color is active
-        # render_sidebar() should update st.session_state['theme_color']
+        # 3. IDENTIFY COMPANY (Updates theme_color in session state)
         page = render_sidebar()
         
-        # 4. SECOND: Apply the theme using that active color
+        # 4. APPLY THEME (Paints the UI)
         apply_master_theme()
         
-        # 5. THIRD: Show the content with correct indentation
+        # 5. CONTENT ROUTING
         try:
             if page == "Settings":
                 show_settings() 
