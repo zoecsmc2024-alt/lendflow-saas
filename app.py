@@ -913,25 +913,35 @@ def show_borrowers():
         with st.form("add_borrower_form", clear_on_submit=True):
             st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
+            
+            # Row 1
             name = c1.text_input("Full Name*")
             phone = c2.text_input("Phone Number*")
-            nid = c1.text_input("National ID / NIN")
-            addr = c2.text_input("Physical Address")
+            
+            # Row 2
+            email = c1.text_input("Email Address")
+            nid = c2.text_input("National ID / NIN")
+            
+            # Row 3
+            addr = c1.text_input("Physical Address")
+            nok = c2.text_input("Next of Kin (Name & Contact)")
             
             if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
                 if name and phone:
                     # FIX: Generate a valid UUID
                     new_id = str(uuid.uuid4())
                     
-                    # FIX: Fallback for tenant_id to prevent RLS violations (Error 42501)
+                    # FIX: Fallback for tenant_id
                     t_id = "test-tenant-123"
                     
                     new_entry = pd.DataFrame([{
                         "id": new_id, 
                         "name": name, 
                         "phone": phone, 
+                        "email": email,           # ADDED
                         "national_id": nid, 
                         "address": addr, 
+                        "next_of_kin": nok,       # ADDED
                         "status": "Active",
                         "tenant_id": t_id 
                     }])
@@ -941,7 +951,6 @@ def show_borrowers():
                         st.rerun()
                 else:
                     st.error("⚠️ Please fill in Name and Phone Number.")
-    # --- TAB 3: AUDIT & MANAGE ---
         with tab_audit:
             if not df.empty:
                 target_name = st.selectbox("Select Borrower to Audit/Manage", df["name"].tolist(), key="audit_manage_select")
