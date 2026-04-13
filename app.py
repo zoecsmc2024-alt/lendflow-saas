@@ -69,7 +69,7 @@ def apply_master_theme():
     """, unsafe_allow_html=True)
 
 # --- TOP OF SCRIPT (Data Loading Section) ---
-loans_df = load_data("loans") # Or however you fetch your data
+loans_df = fetch_data("loans") # Or however you fetch your data
 
 if not loans_df.empty:
     # This fixes the "['borrower'] not in index" error for the whole app
