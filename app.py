@@ -2433,41 +2433,43 @@ if __name__ == "__main__":
         apply_master_theme()
         run_auth_ui(supabase)
     else:
-        check_session_timeout() # Works because imports are fixed
-        
-        # 1. SIDEBAR FIRST (Fetch color)
-        page = render_sidebar()
-        
-        # 2. THEME SECOND (Apply color)
-        apply_master_theme()
-        
-        # 3. CONTENT THIRD
-        if page == "Settings":
-            show_settings()
-        elif page == "Overview":
-            show_dashboard_view()
-        elif page == "Loans":
-            show_loans()
-        elif page == "Borrowers":
-            show_borrowers()
-        elif page == "Collateral":
-            show_collateral()
-        elif page == "Calendar":
-            show_calendar()
-        elif page == "Ledger":
-            show_ledger()
-        elif page == "Overdue Tracker":
-            show_overdue_tracker()
-        elif page == "Payments":
-            show_payments()
-        elif page == "Expenses":
-            show_expenses()
-        elif page == "Petty Cash":
-            show_petty_cash()
-        elif page == "Payroll":
-            show_payroll()
-        else:
-            st.info(f"The {page} module is coming online soon.")
+        try:
+            # Wrap the authenticated logic in a try block
+            check_session_timeout()
+            
+            # 1. SIDEBAR FIRST (Fetch color)
+            page = render_sidebar()
+            
+            # 2. THEME SECOND (Apply color)
+            apply_master_theme()
+            
+            # 3. CONTENT THIRD
+            if page == "Settings":
+                show_settings()
+            elif page == "Overview":
+                show_dashboard_view()
+            elif page == "Loans":
+                show_loans()
+            elif page == "Borrowers":
+                show_borrowers()
+            elif page == "Collateral":
+                show_collateral()
+            elif page == "Calendar":
+                show_calendar()
+            elif page == "Ledger":
+                show_ledger()
+            elif page == "Overdue Tracker":
+                show_overdue_tracker()
+            elif page == "Payments":
+                show_payments()
+            elif page == "Expenses":
+                show_expenses()
+            elif page == "Petty Cash":
+                show_petty_cash()
+            elif page == "Payroll":
+                show_payroll()
+            else:
+                st.info(f"The {page} module is coming online soon.")
                 
-    except Exception as e:
-        st.error(f"Application Error: {e}")
+        except Exception as e:
+            st.error(f"Application Error: {e}")
