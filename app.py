@@ -2494,7 +2494,7 @@ def show_settings():
         
         # Update the database record for this company
         try:
-            supabase.table("companies").update(updated_data).eq("id", active_company['id']).execute()
+            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
             
             st.success("✅ Branding updated successfully!")
             st.info("Applying your new brand identity...")
