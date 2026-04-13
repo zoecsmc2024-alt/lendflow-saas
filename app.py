@@ -1550,18 +1550,18 @@ def show_collateral():
                     else:
                         st.error("⚠️ Provide both a description and value.")
 
-    # --- TAB 2: VIEW & UPDATE ---
+# --- TAB 2: VIEW & UPDATE ---
     with tab_view:
         if not collateral_df.empty:
-            # Ensure numeric conversion (Fixes the 'int' object error)
+            # 1. Numeric Conversion
             collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors='coerce').fillna(0)
             
-            # Detect collateral columns
+            # 2. Dynamic Column Detection (Safety)
             c_bor_col = next((c for c in collateral_df.columns if 'borrower' in c), "borrower")
             c_stat_col = next((c for c in collateral_df.columns if 'status' in c), "status")
             c_id_col = next((c for c in collateral_df.columns if 'id' in c), "id")
 
-            # Metrics
+            # 3. Metrics Calculation
             total_val = collateral_df[collateral_df[c_stat_col] != "Released"]["value"].sum()
             in_custody = collateral_df[collateral_df[c_stat_col].isin(["In Custody", "Held"])].shape[0]
             
@@ -1569,7 +1569,7 @@ def show_collateral():
             m1.markdown(f"""<div style="background-color: #F0F8FF; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">TOTAL ASSET SECURITY</p><h2 style="margin:0; color:{brand_color};">{total_val:,.0f} <span style="font-size:14px;">UGX</span></h2></div>""", unsafe_allow_html=True)
             m2.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">ACTIVE ASSETS</p><h2 style="margin:0; color:{brand_color};">{in_custody}</h2></div>""", unsafe_allow_html=True)
 
-            # Table Generation
+            # 4. Table Generation (Logic remains same, just ensuring variables match)
             rows_html = ""
             for i, r in collateral_df.reset_index().iterrows():
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
@@ -1585,35 +1585,44 @@ def show_collateral():
                 </tr>"""
 
             st.markdown(f"""<div style="border:2px solid {brand_color}; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><thead><tr style="background:{brand_color}; color:white; text-align:left;"><th style="padding:12px;">ID</th><th style="padding:12px;">Borrower</th><th style="padding:12px;">Type</th><th style="padding:12px;">Description</th><th style="padding:12px; text-align:right;">Value</th><th style="padding:12px; text-align:center;">Status</th><th style="padding:12px; text-align:right;">Date</th></tr></thead><tbody>{rows_html}</tbody></table></div>""", unsafe_allow_html=True)
-        else:
-            st.info("💡 No collateral registered yet.")
-            # --- DELETE & EDIT SECTION ---
+
+            # --- DELETE & EDIT SECTION (Now correctly inside the 'not empty' block) ---
+            st.markdown("---")
             with st.expander("⚙️ Manage Collateral Records"):
-                manage_list = collateral_df.apply(lambda x: f"ID: {x['id']} | {x['borrower']} - {x['description']}", axis=1).tolist()
+                # FIX: Use the detected column names to build the list
+                manage_list = collateral_df.apply(lambda x: f"ID: {x[c_id_col]} | {x[c_bor_col]} - {x.get('description', '')}", axis=1).tolist()
                 selected_col = st.selectbox("Select Asset to Modify", manage_list)
                 
-                c_id = int(selected_col.split(" | ")[0].replace("ID: ", ""))
-                c_row = collateral_df[collateral_df["id"] == c_id].iloc[0]
+                c_id = selected_col.split(" | ")[0].replace("ID: ", "")
+                c_row = collateral_df[collateral_df[c_id_col].astype(str) == str(c_id)].iloc[0]
 
                 ce1, ce2 = st.columns(2)
-                upd_desc = ce1.text_input("Edit Description", value=str(c_row["description"]))
-                upd_val = ce1.number_input("Edit Value (UGX)", value=float(c_row["value"]))
+                upd_desc = ce1.text_input("Edit Description", value=str(c_row.get("description", "")))
+                upd_val = ce1.number_input("Edit Value (UGX)", value=float(c_row.get("value", 0)))
                 
                 status_opts = ["In Custody", "Released", "Disposed", "Held"]
-                upd_stat = ce2.selectbox("Update Status", status_opts, index=status_opts.index(c_row["status"]) if c_row["status"] in status_opts else 0)
+                current_stat = str(c_row.get(c_stat_col, "Held"))
+                upd_stat = ce2.selectbox("Update Status", status_opts, index=status_opts.index(current_stat) if current_stat in status_opts else 0)
                 
                 if st.button("💾 Save Asset Changes", use_container_width=True):
                     update_df = pd.DataFrame([{
-                        "id": c_id, "description": upd_desc, "value": upd_val, 
-                        "status": upd_stat, "tenant_id": st.session_state.tenant_id
+                        "id": c_id, 
+                        "description": upd_desc, 
+                        "value": upd_val, 
+                        "status": upd_stat, 
+                        "tenant_id": st.session_state.get('tenant_id')
                     }])
                     if save_data("collateral", update_df):
-                        st.success("✅ Asset record updated!"); st.rerun()
+                        st.success("✅ Asset record updated!")
+                        st.rerun()
 
                 if st.button("🗑️ Delete Asset Record", use_container_width=True):
+                    # Direct call to delete by ID
                     supabase.table("collateral").delete().eq("id", c_id).execute()
-                    st.warning("⚠️ Asset record deleted."); st.rerun()
+                    st.warning("⚠️ Asset record deleted.")
+                    st.rerun()
         else:
+            # This is the ONLY place the 'No collateral' message should appear
             st.info("💡 No collateral registered yet.")
 
 
