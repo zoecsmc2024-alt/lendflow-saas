@@ -1811,47 +1811,27 @@ def show_calendar():
 
     # 1. FETCH DATA
     loans_df = get_cached_data("loans")
-    customers_df = get_cached_data("customers") # Adjust table name if different (e.g., "borrowers")
 
     if loans_df is None or loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- JOIN LOGIC: Get Names instead of UUIDs ---
-    if customers_df is not None and not customers_df.empty:
-        # Standardize customer columns for merging
-        customers_df.columns = customers_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        
-        # Identify the name column in customers table (e.g., 'full_name' or 'name')
-        cust_name_col = next((c for c in customers_df.columns if 'name' in c or 'customer' in c), None)
-        cust_id_col = next((c for c in customers_df.columns if 'id' in c), "id")
-
-        if cust_name_col:
-            # Merge to bring names into loans_df
-            loans_df = loans_df.merge(
-                customers_df[[cust_id_col, cust_name_col]], 
-                left_on='borrower_id', 
-                right_on=cust_id_col, 
-                how='left'
-            )
-
-    # --- DYNAMIC COLUMN DETECTION ---
+    # --- DYNAMIC COLUMN DETECTION (Prioritizing the new Name column) ---
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     
     l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
-    # Priority: Use the newly joined name column if available
-    l_bor_col = next((c for c in loans_df.columns if 'full_name' in c or 'name' in c or 'label' in c), "borrower_id")
+    
+    # Priority 1: New borrower_name column | Priority 2: Label | Fallback: borrower_id
+    l_bor_col = next((c for c in loans_df.columns if 'name' in c or 'label' in c), "borrower_id")
     
     l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
-    l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c or 'expiry' in c), "end_date")
+    l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c), "end_date")
     l_rev_col = next((c for c in loans_df.columns if 'repayable' in c or 'amount' in c), "total_repayable")
 
     # Standardize types
     loans_df[l_end_col] = pd.to_datetime(loans_df[l_end_col], errors="coerce")
     loans_df[l_rev_col] = pd.to_numeric(loans_df[l_rev_col], errors="coerce").fillna(0)
-    
-    # Clean up names for display
-    loans_df[l_bor_col] = loans_df[l_bor_col].fillna("Unknown").astype(str).str.upper()
+    loans_df[l_bor_col] = loans_df[l_bor_col].astype(str).str.upper()
     
     today = pd.Timestamp.today().normalize()
     active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "closed"].copy()
@@ -1894,7 +1874,7 @@ def show_calendar():
     m2.markdown(f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">UPCOMING (7 DAYS) |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{len(upcoming_df)} Accounts</p></div>""", unsafe_allow_html=True)
     m3.markdown(f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#D32F2F;font-weight:bold;">TOTAL OVERDUE |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{overdue_count} Accounts</p></div>""", unsafe_allow_html=True)
 
-    # 3. REVENUE FORECAST
+    # 3. REVENUE FORECAST (This Month)
     st.markdown("---")
     st.markdown("<h4 style='color: #2B3F87;'>📊 Revenue Forecast (This Month)</h4>", unsafe_allow_html=True)
     
