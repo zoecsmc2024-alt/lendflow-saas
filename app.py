@@ -1471,70 +1471,66 @@ import pandas as pd
 import streamlit as st
 
 def show_collateral():
-    """
-    Handles asset security. 
-    Fixed: RLS Violation 42501 by ensuring tenant_id is strictly passed.
-    """
     brand_color = st.session_state.get("theme_color", "#2B3F87")
-    st.markdown(f"<h2 style='color: {brand_color};'>🛡️ Collateral Management</h2>", unsafe_allow_html=True)
+    current_tenant = st.session_state.get('tenant_id')
     
-    # FETCH DATA
+    # 1. Fetch Data
     collateral_df = get_cached_data("collateral")
     loans_df = get_cached_data("loans") 
-    current_tenant = st.session_state.get('tenant_id')
 
-    # Security Barrier: Don't allow interaction if session is lost
     if not current_tenant:
-        st.error("🔐 Security Error: No active session. Please re-login.")
+        st.error("🔐 Session expired. Please log in.")
         st.stop()
-
-    # DETECT COLUMNS
-    l_id_col, l_bor_col, l_stat_col = "id", "borrower", "status"
-    if loans_df is not None and not loans_df.empty:
-        loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
-        l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
-        l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
 
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
-    # --- TAB 1: REGISTER ---
     with tab_reg:
-        if loans_df is None or loans_df.empty:
-            st.warning("⚠️ No loans found.")
-        else:
-            active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-            available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
+        # Standardize columns for filtering
+        loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        active_loans = loans_df[loans_df['status'].str.title() == "Active"]
 
-            with st.form("collateral_form", clear_on_submit=True):
-                st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
-                c1, c2 = st.columns(2)
-                
-                loan_map = {f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] for _, row in available_loans.iterrows()}
-                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
-                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
-                desc = st.text_input("Asset Description")
-                est_value = st.number_input("Estimated Value (UGX)", min_value=0)
-                submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+        with st.form("collateral_form", clear_on_submit=True):
+            st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            
+            loan_opts = {f"{str(r['id'])[:8]} | {r['borrower']}": r['id'] for _, r in active_loans.iterrows()}
+            selected_loan = c1.selectbox("Link to Loan", options=list(loan_opts.keys()))
+            asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed"])
+            
+            desc = st.text_input("Description (e.g., Plate No, Title No)")
+            val = st.number_input("Estimated Value (UGX)", min_value=0)
+            
+            # --- NEW: PHOTO UPLOAD ---
+            uploaded_file = st.file_uploader("Upload Asset Photo (JPG/PNG)", type=["jpg", "jpeg", "png"])
+            
+            submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
-            if submit and desc and est_value > 0:
-                full_loan_id = loan_map[selected_label]
-                sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
+        if submit and desc and val > 0:
+            photo_url = None
+            
+            # Handle Image Upload to Supabase Storage
+            if uploaded_file:
+                file_path = f"{current_tenant}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_file.name}"
+                # Replace 'supabase.storage...' with your specific helper function if you have one
+                res = supabase.storage.from_('collateral-photos').upload(file_path, uploaded_file.getvalue())
+                if res.status_code == 200:
+                    photo_url = supabase.storage.from_('collateral-photos').get_public_url(file_path)
 
-                new_asset = pd.DataFrame([{
-                    "borrower": sel_borrower,
-                    "loan_id": full_loan_id,
-                    "type": asset_type,
-                    "description": desc,
-                    "value": float(est_value),
-                    "status": "Held",
-                    "date_added": datetime.now().strftime("%Y-%m-%d"),
-                    "tenant_id": current_tenant # CRITICAL: Must match DB policy
-                }])
-                
-                if save_data("collateral", new_asset):
-                    st.success("✅ Asset registered!")
-                    st.rerun()
+            new_asset = pd.DataFrame([{
+                "borrower": selected_loan.split("|")[1].strip(),
+                "loan_id": loan_opts[selected_loan],
+                "type": asset_type,
+                "description": desc,
+                "value": float(val),
+                "status": "Held",
+                "photo_url": photo_url,  # Store the link to the photo
+                "tenant_id": current_tenant,
+                "date_added": datetime.now().strftime("%Y-%m-%d")
+            }])
+            
+            if save_data("collateral", new_asset):
+                st.success("✅ Asset and Photo registered!")
+                st.rerun()
 
     # --- TAB 2: INVENTORY ---
     with tab_view:
