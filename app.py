@@ -1199,7 +1199,15 @@ def normalize_status(status):
                 styles[status_idx] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px; text-align: center;'
                 return styles
 
-            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "start_date", "status"]
+            show_cols = [
+    "loan_id_label",
+    "borrower",
+    "principal",
+    "interest_rate",
+    "total_repayable",
+    "due_date",
+    "status"
+]
             
             st.dataframe(
                 loans_df[show_cols].style.format({
@@ -1213,100 +1221,103 @@ def normalize_status(status):
             st.info("No loans found. Head over to 'New Loan' to get started!")
 
     # ==============================
-    # TAB: NEW LOAN
-    # ==============================
-    with tab_add:
-        if active_borrowers.empty:
-            st.info("💡 Tip: Activate a borrower first.")
-        else:
-            with st.form("loan_issue_form"):
-                st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
-                col1, col2 = st.columns(2)
-                
-                borrower_map = dict(zip(active_borrowers[bor_name_col], active_borrowers["id"]))
-                selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
-                selected_id = borrower_map[selected_name]
-                
-                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
-                date_issued = col1.date_input("Start Date", value=datetime.now())
-                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
-                date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
-
-                total_due = amount + ((interest_rate / 100) * amount)
-                st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
-
-                if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
-                    t_id = st.session_state.get('tenant_id', 'test-tenant-123')
-                    readable_label = f"LN-{random.randint(1000, 9999)}"
-
-                    loan_data = {
-                        "loan_id_label": readable_label, 
-                        "borrower_id": selected_id, 
-                        "principal": float(amount), 
-                        "interest": float((interest_rate/100)*amount),
-                        "total_repayable": float(total_due), 
-                        "amount_paid": 0.0,
-                        "status": "ACTIVE", 
-                        "start_date": str(date_issued), 
-                        "end_date": str(date_due),
-                        "tenant_id": t_id
-                    }
-                    
-                    new_loan_df = pd.DataFrame([loan_data])
-                    
-                    if save_data("loans", new_loan_df):
-                        st.success(f"✅ Loan {readable_label} issued!")
-                        st.rerun()
-
-    # ==============================
-    # TAB: ACTIONS (ROLLOVER ENGINE)
-    # ==============================
-    with tab_actions:
-        st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
-        
-        if loans_df.empty:
-            st.write("Saving status:", loan_data["status"])
-            st.info("No active loans to roll over.")
-        else:
-            eligible_loans = loans_df[loans_df["status"] != "CLOSED"]
+# TAB: NEW LOAN
+# ==============================
+with tab_add:
+    if active_borrowers.empty:
+        st.info("💡 Tip: Activate a borrower first.")
+    else:
+        with st.form("loan_issue_form"):
+            st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
             
-            if eligible_loans.empty:
-                st.success("All loans are currently settled! ✨")
-            else:
-                roll_options = dict(zip(eligible_loans["display_label"], eligible_loans["id"]))
-                sel_roll_label = st.selectbox("Select Loan to Roll Over", options=list(roll_options.keys()))
-                roll_sel_id = roll_options[sel_roll_label]
-                
-                loan_to_roll = eligible_loans[eligible_loans["id"] == roll_sel_id].iloc[0]
-                
-                st.warning(f"You are rolling over {sel_roll_label}")
-                
-                current_unpaid = loan_to_roll['balance']
-                new_interest_rate = st.number_input("New Monthly Interest (%)", value=10.0, key="roll_int")
-                
-                if st.button("🔥 Execute Rollover", use_container_width=True):
-                    supabase.table("loans").update({"status": "ROLLED_OVER"}).eq("id", loan_to_roll['id']).execute()
-                    
-                    t_id = st.session_state.get('tenant_id', 'default-admin')
-                    new_label = f"ROLL-{random.randint(1000, 9999)}"
+            borrower_map = dict(zip(active_borrowers[bor_name_col], active_borrowers["id"]))
+            selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
+            selected_id = borrower_map[selected_name]
+            
+            amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
+            date_issued = col1.date_input("Start Date", value=datetime.now())
+            l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
+            interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
+            date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                    new_cycle = pd.DataFrame([{
-                        "loan_id_label": new_label,
-                        "borrower_id": loan_to_roll['borrower_id'], 
-                        "principal": float(current_unpaid), 
-                        "interest": float(current_unpaid * (new_interest_rate / 100)),
-                        "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
-                        "amount_paid": 0.0,
-                        "status": "ACTIVE",
-                        "start_date": datetime.now().strftime("%Y-%m-%d"),
-                        "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-                        "tenant_id": t_id 
-                    }])
+            total_due = amount + ((interest_rate / 100) * amount)
+            st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
-                    if save_data("loans", new_cycle):
-                        st.success(f"✅ Loan rolled over as {new_label}!")
-                        st.rerun()
+            if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
+                t_id = st.session_state.get('tenant_id', 'test-tenant-123')
+                readable_label = f"LN-{random.randint(1000, 9999)}"
+
+                loan_data = {
+                    "loan_id_label": readable_label,
+                    "borrower_id": selected_id,
+                    "principal": float(amount),
+                    "interest_rate": float(interest_rate),
+                    "interest": float((interest_rate/100)*amount),
+                    "total_repayable": float(total_due),
+                    "amount_paid": 0.0,
+                    "status": "ACTIVE", # Matches your SQL Check Constraint
+                    "start_date": str(date_issued),
+                    "end_date": str(date_due),
+                    "due_date": str(date_due),
+                    "tenant_id": t_id
+                }
+                new_loan_df = pd.DataFrame([loan_data])
+                
+                if save_data("loans", new_loan_df):
+                    st.success(f"✅ Loan {readable_label} issued!")
+                    st.rerun()
+
+# ==============================
+# TAB: ACTIONS (ROLLOVER ENGINE)
+# ==============================
+with tab_actions:
+    st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
+    
+    if loans_df.empty:
+        st.info("No active loans to roll over.")
+    else:
+        eligible_loans = loans_df[loans_df["status"] != "CLOSED"]
+        
+        if eligible_loans.empty:
+            st.success("All loans are currently settled! ✨")
+        else:
+            roll_options = dict(zip(eligible_loans["display_label"], eligible_loans["id"]))
+            sel_roll_label = st.selectbox("Select Loan to Roll Over", options=list(roll_options.keys()))
+            roll_sel_id = roll_options[sel_roll_label]
+            
+            loan_to_roll = eligible_loans[eligible_loans["id"] == roll_sel_id].iloc[0]
+            
+            st.warning(f"You are rolling over {sel_roll_label}")
+            
+            current_unpaid = loan_to_roll['balance']
+            new_interest_rate = st.number_input("New Monthly Interest (%)", value=10.0, key="roll_int")
+            
+            if st.button("🔥 Execute Rollover", use_container_width=True):
+                # Update status to ROLLED OVER (Space instead of underscore to match SQL)
+                supabase.table("loans").update({"status": "ROLLED OVER"}).eq("id", loan_to_roll['id']).execute()
+                
+                t_id = st.session_state.get('tenant_id', 'default-admin')
+                new_label = f"ROLL-{random.randint(1000, 9999)}"
+
+                new_cycle = pd.DataFrame([{
+                    "loan_id_label": new_label,
+                    "borrower_id": loan_to_roll['borrower_id'],
+                    "principal": float(current_unpaid),
+                    "interest_rate": float(new_interest_rate),
+                    "interest": float(current_unpaid * (new_interest_rate / 100)),
+                    "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
+                    "amount_paid": 0.0,
+                    "status": "ACTIVE", # New loan starts as ACTIVE
+                    "start_date": datetime.now().strftime("%Y-%m-%d"),
+                    "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                    "due_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                    "tenant_id": t_id
+                }])
+
+                if save_data("loans", new_cycle):
+                    st.success(f"✅ Loan rolled over as {new_label}!")
+                    st.rerun()
 
     # ==============================
     # TAB: MANAGE/EDIT
