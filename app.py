@@ -2732,30 +2732,58 @@ def show_dashboard_view():
     c_pie, c_bar = st.columns(2)
 
     with c_pie:
-        if not df.empty:
-            status_counts = df["status_clean"].value_counts().reset_index()
+        # Check if our cleaned dataframe exists and has the necessary column
+        if not df_clean.empty and "status_clean" in df_clean.columns:
+            status_counts = df_clean["status_clean"].value_counts().reset_index()
             status_counts.columns = ["Status", "Count"]
-            fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
-            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
+            
+            fig_pie = px.pie(
+                status_counts, 
+                names="Status", 
+                values="Count", 
+                hole=0.5, 
+                title="Loan Distribution", 
+                color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"]
+            )
+            fig_pie.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)', 
+                font_color="#2B3F87", 
+                margin=dict(t=40, b=0, l=0, r=0)
+            )
             st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.info("Insufficient status data for distribution chart.")
 
     with c_bar:
-        if not pay_df.empty:
+        if pay_df is not None and not pay_df.empty:
+            # Ensure dates are processed for the bar chart
             pay_df["date"] = pd.to_datetime(pay_df.get("date"), errors='coerce')
             inc_m = pay_df.groupby(pay_df["date"].dt.strftime('%b %Y'))["amount_clean"].sum().reset_index()
             
-            if not exp_df.empty:
+            # Expense processing
+            if exp_df is not None and not exp_df.empty:
                 exp_df["date"] = pd.to_datetime(exp_df.get("date"), errors='coerce')
                 exp_df['amount_clean'] = pd.to_numeric(exp_df.get('amount'), errors='coerce').fillna(0)
                 exp_m = exp_df.groupby(exp_df["date"].dt.strftime('%b %Y'))["amount_clean"].sum().reset_index()
             else:
                 exp_m = pd.DataFrame(columns=["date", "amount_clean"])
 
+            # Merge and Plot
             m_cash = pd.merge(inc_m, exp_m, on="date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
             m_cash.columns = ["Month", "Income", "Expenses"]
-            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
+            
+            fig_bar = px.bar(
+                m_cash, 
+                x="Month", 
+                y=["Income", "Expenses"], 
+                barmode="group", 
+                title="Performance", 
+                color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"}
+            )
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
             st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("Add payments to see performance trends.")
 # ==========================================
 # FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
