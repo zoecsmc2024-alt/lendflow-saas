@@ -1809,28 +1809,39 @@ def show_overdue_tracker():
 def show_calendar():
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
-    # 1. FETCH TENANT DATA
+    # 1. FETCH DATA
     loans_df = get_cached_data("loans")
+    customers_df = get_cached_data("customers") # Adjust table name if different (e.g., "borrowers")
 
     if loans_df is None or loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- DYNAMIC COLUMN DETECTION (Fixes KeyError and UUID Display) ---
-    # Standardize column names
+    # --- JOIN LOGIC: Get Names instead of UUIDs ---
+    if customers_df is not None and not customers_df.empty:
+        # Standardize customer columns for merging
+        customers_df.columns = customers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        
+        # Identify the name column in customers table (e.g., 'full_name' or 'name')
+        cust_name_col = next((c for c in customers_df.columns if 'name' in c or 'customer' in c), None)
+        cust_id_col = next((c for c in customers_df.columns if 'id' in c), "id")
+
+        if cust_name_col:
+            # Merge to bring names into loans_df
+            loans_df = loans_df.merge(
+                customers_df[[cust_id_col, cust_name_col]], 
+                left_on='borrower_id', 
+                right_on=cust_id_col, 
+                how='left'
+            )
+
+    # --- DYNAMIC COLUMN DETECTION ---
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # 1. Map the ID column
     l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
+    # Priority: Use the newly joined name column if available
+    l_bor_col = next((c for c in loans_df.columns if 'full_name' in c or 'name' in c or 'label' in c), "borrower_id")
     
-    # 2. Map the Borrower Name (Priority: Name > Customer > Borrower)
-    # This prevents the app from grabbing the 'borrower' UUID column if a name column exists
-    l_bor_col = next((c for c in loans_df.columns if 'name' in c or 'customer' in c or 'full' in c), None)
-    
-    if not l_bor_col:
-        l_bor_col = "borrower" # Fallback if no specific name column is found
-
-    # 3. Map other essential columns
     l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
     l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c or 'expiry' in c), "end_date")
     l_rev_col = next((c for c in loans_df.columns if 'repayable' in c or 'amount' in c), "total_repayable")
@@ -1839,12 +1850,10 @@ def show_calendar():
     loans_df[l_end_col] = pd.to_datetime(loans_df[l_end_col], errors="coerce")
     loans_df[l_rev_col] = pd.to_numeric(loans_df[l_rev_col], errors="coerce").fillna(0)
     
-    # Force borrower display to Uppercase String
-    loans_df[l_bor_col] = loans_df[l_bor_col].astype(str).str.upper()
+    # Clean up names for display
+    loans_df[l_bor_col] = loans_df[l_bor_col].fillna("Unknown").astype(str).str.upper()
     
     today = pd.Timestamp.today().normalize()
-    
-    # Filter for active loans
     active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "closed"].copy()
 
     # --- VISUAL CALENDAR WIDGET ---
@@ -1881,12 +1890,11 @@ def show_calendar():
     overdue_count = active_loans[active_loans[l_end_col] < today].shape[0]
 
     m1, m2, m3 = st.columns(3)
-    
     m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">DUE TODAY |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{len(due_today_df)} Accounts</p></div>""", unsafe_allow_html=True)
     m2.markdown(f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">UPCOMING (7 DAYS) |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{len(upcoming_df)} Accounts</p></div>""", unsafe_allow_html=True)
     m3.markdown(f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#D32F2F;font-weight:bold;">TOTAL OVERDUE |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{overdue_count} Accounts</p></div>""", unsafe_allow_html=True)
 
-    # 3. REVENUE FORECAST (This Month)
+    # 3. REVENUE FORECAST
     st.markdown("---")
     st.markdown("<h4 style='color: #2B3F87;'>📊 Revenue Forecast (This Month)</h4>", unsafe_allow_html=True)
     
@@ -1915,7 +1923,6 @@ def show_calendar():
             late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
             od_rows += f"""<tr style="background:#FFF5F5;"><td style="padding:10px;"><b>#{r[l_id_col]}</b></td><td style="padding:10px;">{r[l_bor_col]}</td><td style="padding:10px;color:{late_color};font-weight:bold;">{r['days_late']} Days</td><td style="padding:10px;text-align:center;"><span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r[l_stat_col]}</span></td></tr>"""
         st.markdown(f"""<div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#FF4B4B;color:white;"><th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:center;">Late By</th><th style="padding:10px;text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
-# ==============================
 # 18. EXPENSE MANAGEMENT PAGE
 # ==============================
 
