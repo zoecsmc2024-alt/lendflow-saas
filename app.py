@@ -1261,6 +1261,7 @@ def show_loans():
         st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
         
         if loans_df.empty:
+            st.write("Saving status:", loan_data["status"])
             st.info("No active loans to roll over.")
         else:
             eligible_loans = loans_df[loans_df["status"] != "CLOSED"]
