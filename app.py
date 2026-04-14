@@ -1493,78 +1493,65 @@ def show_collateral():
 
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
-    with tab_reg:
-        if loans_df is None or loans_df.empty:
-            st.warning("⚠️ No loans found.")
-        else:
-            active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-            available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
+    # --- TAB 1: REGISTER ASSET ---
+with tab_reg:
+    if loans_df is None or loans_df.empty:
+        st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+    else:
+        active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+        available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
 
+        if available_loans.empty:
+            st.info("✅ All current loans are cleared. No assets need to be held.")
+        else:
+            # Build the form
             with st.form("collateral_form", clear_on_submit=True):
                 st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 
-                loan_map = {f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
-                            for _, row in available_loans.iterrows()}
-                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
-                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed"])
+                loan_map = {
+                    f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
+                    for _, row in available_loans.iterrows()
+                }
                 
-                desc = st.text_input("Asset Description")
-                est_value = st.number_input("Estimated Value (UGX)", min_value=0)
+                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
+                desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
+                est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
                 uploaded_photo = st.file_uploader("Upload Asset Photo", type=["jpg", "png", "jpeg"])
                 
-                st.write(f"DEBUG: Sending tenant_id: {current_tenant}")
                 submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
+            # --- PROCESS SUBMISSION (OUTSIDE FORM BLOCK) ---
             if submit:
-                # 1. Fetch current tenant and ensure it is a string
-                current_tenant_str = str(st.session_state.get('tenant_id', ''))
+                current_tenant = str(st.session_state.get('tenant_id', ''))
                 
-                if not current_tenant_str:
-                    st.error("❌ Session Error: No Tenant ID found. Please log out and back in.")
+                if not current_tenant:
+                    st.error("❌ Session Error: No Tenant ID found.")
                 elif desc and est_value > 0:
-                    photo_url = None
-                    
-                    # 2. Handle Photo Upload
-                    if uploaded_photo:
-                        try:
-                            file_path = f"{current_tenant_str}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_photo.name}"
-                            mime_type = mimetypes.guess_type(uploaded_photo.name)[0] or "image/jpeg"
-                            
-                            supabase.storage.from_('collateral-photos').upload(
-                                path=file_path,
-                                file=uploaded_photo.getvalue(),
-                                file_options={"content-type": mime_type}
-                            )
-                            photo_url = supabase.storage.from_('collateral-photos').get_public_url(file_path)
-                        except Exception as e:
-                            st.error(f"📸 Upload failed: {e}")
-
-                    # 3. Securely build the payload
                     try:
                         full_loan_id = loan_map[selected_label]
+                        # Correctly fetch borrower name from the filtered dataframe
                         sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
 
                         new_asset = pd.DataFrame([{
-                            "loan_id": full_loan_id,             # UUID
-                            "tenant_id": current_tenant_str,     # TEXT
-                            "borrower": str(sel_borrower),       # TEXT
+                            "loan_id": full_loan_id,
+                            "tenant_id": current_tenant,
+                            "borrower": str(sel_borrower),
                             "type": asset_type,
                             "description": desc,
                             "value": float(est_value),
                             "status": "Held",
-                            "photo_url": photo_url,
                             "date_added": datetime.now().strftime("%Y-%m-%d")
                         }])
                         
-                        # 4. Attempt Database Save
                         if save_data("collateral", new_asset):
-                            st.success("✅ Asset registered successfully!")
+                            st.success("✅ Asset registered!")
                             st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Error processing data: {e}")
+                        st.error(f"❌ processing error: {e}")
                 else:
-                    st.error("⚠️ Please provide an asset description and an estimated value greater than 0.")
+                    st.error("⚠️ Please provide a description and value.")
     # --- TAB 2: INVENTORY ---
     with tab_view:
         if collateral_df is None or collateral_df.empty:
