@@ -961,7 +961,8 @@ def show_borrowers():
     # --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
-            st.markdown(f<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
+            # Fixed the missing quote below
+            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             
             name = c1.text_input("Full Name*")
