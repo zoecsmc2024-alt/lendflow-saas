@@ -1816,13 +1816,16 @@ def show_calendar():
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- DYNAMIC COLUMN DETECTION (Fixes KeyError: 'borrower') ---
+    # --- DYNAMIC COLUMN DETECTION (Fixes UUID Display vs Name) ---
     # Standardize column names to lowercase and underscores
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     
     # Map the most likely column names found in your database
     l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
-    l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
+    
+    # FIX: Priority search for name-based columns to avoid showing the UUID/ID string
+    l_bor_col = next((c for c in loans_df.columns if 'name' in c or 'customer' in c or 'full' in c), "borrower")
+    
     l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
     l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c or 'expiry' in c), "end_date")
     l_rev_col = next((c for c in loans_df.columns if 'repayable' in c or 'amount' in c), "total_repayable")
@@ -1830,6 +1833,9 @@ def show_calendar():
     # Standardize types for SaaS logic
     loans_df[l_end_col] = pd.to_datetime(loans_df[l_end_col], errors="coerce")
     loans_df[l_rev_col] = pd.to_numeric(loans_df[l_rev_col], errors="coerce").fillna(0)
+    
+    # Ensure the borrower column is treated as a clean string for display
+    loans_df[l_bor_col] = loans_df[l_bor_col].astype(str).str.upper()
     
     today = pd.Timestamp.today().normalize()
     
