@@ -1951,33 +1951,54 @@ def show_calendar():
             </div>""", unsafe_allow_html=True)
 
     # 5. OVERDUE FOLLOW-UP
-    st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
-    overdue_df = active_loans[active_loans[l_end_col] < today].copy()
-    if not overdue_df.empty:
-        overdue_df["days_late"] = (today - overdue_df[l_end_col]).dt.days
-        od_rows = ""
-        for _, r in overdue_df.iterrows():
-            late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-            od_rows += f"""
-                <tr style="background:#FFF5F5;">
-                    <td style="padding:10px;"><b>#{str(r[l_id_col])[:8]}</b></td>
-                    <td style="padding:10px;">{r[l_bor_col]}</td>
-                    <td style="padding:10px;color:{late_color};font-weight:bold;text-align:center;">{r['days_late']} Days</td>
-                    <td style="padding:10px;text-align:center;"><span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r[l_stat_col]}</span></td>
-                </tr>"""
+st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
+
+# Calculate overdue loans
+overdue_df = active_loans[active_loans[l_end_col] < today].copy()
+
+if not overdue_df.empty:
+    # Calculate days late
+    overdue_df["days_late"] = (today - overdue_df[l_end_col]).dt.days
+    
+    od_rows = ""
+    for _, r in overdue_df.iterrows():
+        # Dynamic color: Red for > 1 week late, Orange for recently late
+        late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
         
-        st.markdown(f"""
-            <div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                    <tr style="background:#FF4B4B;color:white;">
-                        <th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th>
-                        <th style="padding:10px;text-align:center;">Late By</th><th style="padding:10px;text-align:center;">Status</th>
-                    </tr>
-                    {od_rows}
-                </table>
-            </div>""", unsafe_allow_html=True)
-    else:
-        st.success("🎉 No overdue accounts. All collections are up to date!")                                                                                                                                                                                                                   
+        # Build Table Rows
+        od_rows += f"""
+        <tr style="background-color: #FFF5F5; border-bottom: 1px solid #FF4B4B22;">
+            <td style="padding:10px;"><b>#{str(r[l_id_col])[:8]}</b></td>
+            <td style="padding:10px;">{r[l_bor_col]}</td>
+            <td style="padding:10px; color:{late_color}; font-weight:bold; text-align:center;">{r['days_late']} Days</td>
+            <td style="padding:10px; text-align:center;">
+                <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">
+                    {r[l_stat_col]}
+                </span>
+            </td>
+        </tr>
+        """
+    
+    # Render the full table
+    st.markdown(f"""
+    <div style="border: 1px solid #FF4B4B; border-radius: 10px; overflow: hidden;">
+        <table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px;">
+            <thead>
+                <tr style="background: #FF4B4B; color: white; text-align: left;">
+                    <th style="padding:10px;">ID</th>
+                    <th style="padding:10px;">Borrower</th>
+                    <th style="padding:10px; text-align:center;">Late By</th>
+                    <th style="padding:10px; text-align:center;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {od_rows}
+            </tbody>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.success("🎉 No overdue accounts. All collections are up to date!")                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE
