@@ -1501,12 +1501,19 @@ def show_collateral():
     # --- STEP 1: DEFINE TABS (Prevents NameError) ---
 tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
+# --- STEP 1: LOAD ALL DATA FIRST (Prevents NameError) ---
+# Load your data at the top so variables exist for both tabs
+loans_df = get_cached_data("loans")
+collateral_df = get_cached_data("collateral")
+
+# --- STEP 2: DEFINE TABS ---
+tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
+
 # --- TAB 1: REGISTER ASSET ---
 with tab_reg:
-    if loans_df.empty:
+    if loans_df is None or loans_df.empty:
         st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
     else:
-        # Filter for active loans
         active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
         available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
 
@@ -1517,7 +1524,6 @@ with tab_reg:
                 st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
                 c1, c2 = st.columns(2)
                 
-                # SHORT ID LOGIC: Slices ID to 8 chars for a clean UI dropdown
                 loan_map = {
                     f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
                     for _, row in available_loans.iterrows()
@@ -1527,23 +1533,16 @@ with tab_reg:
                 asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
                 desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
                 est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
-
-                # FIXED: Form submit button explicitly defined
                 submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
-            # Logic moved INSIDE 'with tab_reg' but OUTSIDE 'with st.form'
             if submit:
-                # 1. Verify the tenant_id is actually loaded in the session
                 current_tenant = st.session_state.get('tenant_id')
-                
                 if not current_tenant:
                     st.error("❌ Session Error: No Tenant ID found. Please log out and back in.")
                 elif desc and est_value > 0:
-                    # Map back to full UUID from the clean UI label
                     full_loan_id = loan_map[selected_label]
                     sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
 
-                    # 2. Build the data with the tenant_id included
                     new_asset = pd.DataFrame([{
                         "borrower": sel_borrower,
                         "loan_id": full_loan_id,
@@ -1552,10 +1551,9 @@ with tab_reg:
                         "value": float(est_value),
                         "status": "Held",
                         "date_added": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": current_tenant  # Passes RLS check
+                        "tenant_id": current_tenant 
                     }])
                     
-                    # 3. Save to database
                     if save_data("collateral", new_asset):
                         st.success(f"✅ Asset registered for {sel_borrower}!")
                         st.rerun()
@@ -2596,6 +2594,9 @@ def show_dashboard_view():
     
     # 1. LOAD DATA
     df = get_cached_data("loans")
+if not df.empty:
+    # This ensures "principal" becomes "Principal" for your metrics logic
+    df.columns = [c.strip().title().replace("_", " ") for c in df.columns]
     pay_df = get_cached_data("payments")
     exp_df = get_cached_data("expenses") 
     bor_df = get_cached_data("borrowers")
