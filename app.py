@@ -1950,119 +1950,90 @@ def show_calendar():
                 </table>
             </div>""", unsafe_allow_html=True)
 
-    # 5. OVERDUE FOLLOW-UP (PRO VERSION)
-import pandas as pd
-from datetime import datetime
+    # ==============================
+# 📍 MASTER LOAN LEDGER (TRACKER ONLY - FIXED)
+# ==============================
 
-st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
+st.markdown("### 🏢 Master Loan Ledger")
 
-# -------------------------------
-# 1. SET TODAY
-# -------------------------------
-today = pd.Timestamp(datetime.now())
-
-# -------------------------------
-# 2. SAFE COPY (NO SIDE EFFECTS)
-# -------------------------------
 if active_loans is None or active_loans.empty:
-    st.info("ℹ️ No active loans found.")
+    st.info("ℹ️ No loan records found.")
 else:
-    df_loans = active_loans.copy()
+    df = active_loans.copy()
 
     # -------------------------------
-    # 3. SMART COLUMN DETECTION
+    # 1. SAFE COLUMN DETECTION
     # -------------------------------
-    def find_col(possible_names, df, default=None):
+    def find_col(names):
         for col in df.columns:
-            col_lower = col.lower()
-            if any(name in col_lower for name in possible_names):
+            if any(n in col.lower() for n in names):
                 return col
-        return default
+        return None
 
-    l_end_col  = find_col(["end", "due", "maturity"], df_loans)
-    l_bor_col  = find_col(["borrower", "name", "client"], df_loans, "borrower")
-    l_id_col   = find_col(["id"], df_loans, "id")
-    l_stat_col = find_col(["status"], df_loans, "status")
+    id_col       = find_col(["id"])
+    borrower_col = find_col(["borrower", "name", "client", "customer"])
+    amount_col   = find_col(["amount", "principal"])
+    status_col   = find_col(["status"])
+    due_col      = find_col(["due", "end", "maturity"])
 
-    if not l_end_col:
-        st.error("❌ Could not find an 'End Date' or 'Due Date' column in the loans data.")
-    else:
-        # -------------------------------
-        # 4. CLEAN DATE COLUMN
-        # -------------------------------
-        df_loans[l_end_col] = pd.to_datetime(df_loans[l_end_col], errors='coerce')
+    if not id_col or not borrower_col:
+        st.error("❌ Required columns missing (ID / Borrower)")
+        st.write("Columns found:", list(df.columns))
+        st.stop()
 
-        # Drop invalid dates
-        df_loans = df_loans.dropna(subset=[l_end_col])
+    # -------------------------------
+    # 2. CLEAN DATA
+    # -------------------------------
+    df[id_col] = df[id_col].astype(str)
 
-        # -------------------------------
-        # 5. FILTER OVERDUE
-        # -------------------------------
-        overdue_df = df_loans[df_loans[l_end_col] < today].copy()
+    if amount_col:
+        df[amount_col] = pd.to_numeric(df[amount_col], errors='coerce').fillna(0)
 
-        if overdue_df.empty:
-            st.success("🎉 No overdue accounts. All collections are up to date!")
+    if due_col:
+        df[due_col] = pd.to_datetime(df[due_col], errors='coerce')
+
+    # -------------------------------
+    # 3. SIMPLE DISPLAY TABLE
+    # -------------------------------
+    display_cols = {
+        id_col: "ID",
+        borrower_col: "Borrower"
+    }
+
+    if amount_col:
+        display_cols[amount_col] = "Amount"
+
+    if due_col:
+        display_cols[due_col] = "Due Date"
+
+    if status_col:
+        display_cols[status_col] = "Status"
+
+    view_df = df[list(display_cols.keys())].rename(columns=display_cols)
+
+    # Format
+    if "Amount" in view_df.columns:
+        view_df["Amount"] = view_df["Amount"].apply(lambda x: f"{x:,.0f}")
+
+    if "Due Date" in view_df.columns:
+        view_df["Due Date"] = pd.to_datetime(view_df["Due Date"], errors='coerce').dt.strftime("%Y-%m-%d")
+
+    # -------------------------------
+    # 4. SHOW TABLE (LIGHTWEIGHT)
+    # -------------------------------
+    st.dataframe(view_df, use_container_width=True)
+
+    # -------------------------------
+    # 5. QUICK OVERDUE COUNT (TRACKER INSIGHT)
+    # -------------------------------
+    if due_col:
+        today = pd.Timestamp.now()
+        overdue_count = (df[due_col] < today).sum()
+
+        if overdue_count > 0:
+            st.warning(f"⚠️ {overdue_count} loan(s) overdue")
         else:
-            # -------------------------------
-            # 6. COMPUTE DAYS LATE
-            # -------------------------------
-            overdue_df["days_late"] = (today - overdue_df[l_end_col]).dt.days
-
-            # Sort worst first (VERY IMPORTANT for ops)
-            overdue_df = overdue_df.sort_values(by="days_late", ascending=False)
-
-            # Optional: limit rows for performance
-            MAX_ROWS = 100
-            display_df = overdue_df.head(MAX_ROWS)
-
-            # -------------------------------
-            # 7. BUILD HTML TABLE (FAST)
-            # -------------------------------
-            rows_html = []
-
-            for _, r in display_df.iterrows():
-                days_late = int(r["days_late"])
-                late_color = "#FF4B4B" if days_late > 7 else "#FFA500"
-
-                rows_html.append(f"""
-                <tr style="background-color: #FFF5F5; border-bottom: 1px solid #FF4B4B22;">
-                    <td style="padding:10px;"><b>#{str(r[l_id_col])[:8]}</b></td>
-                    <td style="padding:10px;">{r.get(l_bor_col, 'N/A')}</td>
-                    <td style="padding:10px; color:{late_color}; font-weight:bold; text-align:center;">
-                        {days_late} Days
-                    </td>
-                    <td style="padding:10px; text-align:center;">
-                        <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">
-                            {r.get(l_stat_col, 'N/A')}
-                        </span>
-                    </td>
-                </tr>
-                """)
-
-            table_html = f"""
-            <div style="border: 1px solid #FF4B4B; border-radius: 10px; overflow: hidden;">
-                <table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px;">
-                    <thead>
-                        <tr style="background: #FF4B4B; color: white; text-align: left;">
-                            <th style="padding:10px;">ID</th>
-                            <th style="padding:10px;">Borrower</th>
-                            <th style="padding:10px; text-align:center;">Late By</th>
-                            <th style="padding:10px; text-align:center;">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {''.join(rows_html)}
-                    </tbody>
-                </table>
-            </div>
-            """
-
-            st.markdown(table_html, unsafe_allow_html=True)
-
-            # -------------------------------
-            # 8. EXTRA INSIGHT (POWER FEATURE)
-            # -------------------------------
-            st.caption(f"Showing {len(display_df)} of {len(overdue_df)} overdue loans")                                                                                                                      
+            st.success("✅ No overdue loans")                                                                                                                      
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE
