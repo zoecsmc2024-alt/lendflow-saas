@@ -867,21 +867,16 @@ def show_loans():
     borrowers_df = get_data("borrowers")
     
     # --- FIX: NAME MAPPING ENGINE ---
-    # This prevents the table from showing "027e1283..." instead of "John Doe"
     if borrowers_df is not None and not borrowers_df.empty and loans_df is not None:
-        # 1. Standardize column names for mapping
         borrowers_df.columns = [c.lower() for c in borrowers_df.columns]
         b_id_col = next((c for c in borrowers_df.columns if 'id' in c), None)
         b_name_col = next((c for c in borrowers_df.columns if 'name' in c), None)
         
         if b_id_col and b_name_col:
-            # Create a dictionary {id: name}
             name_map = dict(zip(borrowers_df[b_id_col].astype(str), borrowers_df[b_name_col]))
-            # Apply to the loans table
             loan_b_col = next((c for c in loans_df.columns if 'borrower' in c), 'borrower_id')
             loans_df['borrower_name'] = loans_df[loan_b_col].astype(str).map(name_map).fillna(loans_df[loan_b_col])
     
-    # Filter for Active Borrowers only for the "New Loan" form
     if borrowers_df is not None and not borrowers_df.empty:
         stat_col = next((c for c in borrowers_df.columns if 'status' in c), None)
         if stat_col:
@@ -908,11 +903,10 @@ def show_loans():
         closed_mask = loans_df["balance"] <= 0
         loans_df.loc[closed_mask, "status"] = "Closed"
 
-    # FIX: Correct Tab Assignment to avoid NameError: 'tab_actions' is not defined
-    tab_view, tab_add, tab_actions, tab_manage = st.tabs([
+    # --- 2. DEFINE TABS (CRITICAL: Variable names must match 'with' statements) ---
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
     ])
-
     # ==============================
     # TAB: PORTFOLIO VIEW (Luxe Theme)
     # ==============================
