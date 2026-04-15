@@ -897,10 +897,26 @@ def show_loans():
     # TAB: PORTFOLIO VIEW
     # ==============================
     with tab_view:
+        # 1. Define styling function (Top of tab for clarity)
+        def style_loan_table(row):
+            status = str(row.get("status", "")).upper()
+            colors = {
+                "ACTIVE": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
+                "ROLLED": "#7B1FA2", "BCF": "#FFA500", "PENDING": "#FBC02D"
+            }
+            s_color = colors.get(status, "#9E9E9E")
+            styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
+            
+            if "status" in row.index:
+                status_idx = row.index.get_loc("status")
+                styles[status_idx] = (
+                    f'background-color: {s_color}; color: white; font-weight: bold; '
+                    f'border-radius: 6px; text-align: center; padding: 4px;'
+                )
+            return styles
 
+        # 2. Check Data & Build Mapping
         if not loans_df.empty:
-
-            # ✅ FIXED HERE (df → borrowers_df)
             if not borrowers_df.empty:
                 bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
                 loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
@@ -909,6 +925,7 @@ def show_loans():
 
             loans_df['display_label'] = loans_df['loan_id_label'].astype(str) + " - " + loans_df['borrower'].astype(str)
 
+            # 3. Selection & Metrics
             sel_label = st.selectbox(
                 "🔍 Select Loan to Inspect",
                 options=loans_df['display_label'].unique(),
@@ -916,7 +933,6 @@ def show_loans():
             )
 
             latest_info = loans_df[loans_df["display_label"] == sel_label].iloc[-1]
-
             rec_val = float(latest_info.get('amount_paid', 0))
             total_rep = float(latest_info.get('total_repayable', 0))
             out_val = total_rep - rec_val
@@ -925,8 +941,8 @@ def show_loans():
             if stat_val == "CLOSED":
                 out_val = 0
 
+            # 4. Metric Cards
             c1, c2, c3 = st.columns(3)
-
             card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"
             text_style = "margin:0; color:#0A192F;"
 
@@ -936,65 +952,20 @@ def show_loans():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-                        def style_loan_table(row):
-                # ✅ Normalize status (prevents DB mismatch issues)
-                status = str(row.get("status", "")).upper()
-
-                # ✅ Full color system (expandable + consistent)
-                colors = {
-                    "ACTIVE": "#4A90E2",     # Blue
-                    "CLOSED": "#2E7D32",     # Green
-                    "OVERDUE": "#D32F2F",    # Red
-                    "ROLLED": "#7B1FA2",     # Purple
-                    "BCF": "#FFA500",        # Orange
-                    "PENDING": "#FBC02D"     # Yellow
-                }
-
-                s_color = colors.get(status, "#9E9E9E")  # Default grey
-
-                # ✅ Base style for entire row
-                styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
-
-                # ✅ Safely locate status column
-                if "status" in row.index:
-                    status_idx = row.index.get_loc("status")
-
-                    styles[status_idx] = (
-                        f'background-color: {s_color}; '
-                        f'color: white; '
-                        f'font-weight: bold; '
-                        f'border-radius: 6px; '
-                        f'text-align: center; '
-                        f'padding: 4px;'
-                    )
-
-                return styles
-
-
-            show_cols = [
-                "loan_id_label",
-                "borrower",
-                "principal",
-                "total_repayable",
-                "start_date",
-                "status"
-            ]
-
+            # 5. Main Portfolio Table
+            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "start_date", "status"]
+            
             st.dataframe(
                 loans_df[show_cols].style
-                .format({
-                    "principal": "{:,.0f}",
-                    "total_repayable": "{:,.0f}"
-                })
+                .format({"principal": "{:,.0f}", "total_repayable": "{:,.0f}"})
                 .apply(style_loan_table, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
-
         else:
             st.info("No loans found. Head over to 'New Loan' to get started!")
 
-# ==============================
+    # ==============================
     # TAB: NEW LOAN (Supabase Integration)
     # ==============================
     with tab_add:
