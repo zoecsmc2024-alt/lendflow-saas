@@ -2784,108 +2784,52 @@ def show_dashboard_view():
             # ... Income/Expense Logic ...
             st.write("Monthly Cashflow View Active")
 # ==========================================
-# FINAL APP ROUTER (REACTIVE + SAAS STABLE + THEME SAFE)
+# FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
 
-import streamlit as st
-
 if __name__ == "__main__":
-
-    # ==============================
-    # 0. SAFE DEFAULTS (FIRST LOAD)
-    # ==============================
-    # Establish the brand identity before anything else renders
-    if "theme_color" not in st.session_state:
-        st.session_state["theme_color"] = "#1E3A8A"
-
-    if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
-
-    try:
-        # ==============================
-        # 1. AUTH FLOW (UNAUTHENTICATED)
-        # ==============================
-        if not st.session_state.get("logged_in"):
-            # Apply branding to the login page for professional appearance
+    if not st.session_state.get("logged_in"):
+        st.session_state['theme_color'] = "#1E3A8A"
+        apply_master_theme()
+        run_auth_ui(supabase)
+    else:
+        try:
+            # Wrap the authenticated logic in a try block
+            check_session_timeout()
+            
+            # 1. SIDEBAR FIRST (Fetch color)
+            page = render_sidebar()
+            
+            # 2. THEME SECOND (Apply color)
             apply_master_theme()
             
-            # Check if database is ready
-            if 'supabase' in globals():
-                try:
-                    # Attempt to call with argument (for newer definition)
-                    run_auth_ui(supabase)
-                except TypeError:
-                    # Fallback to call without argument (for older definition)
-                    run_auth_ui()
+            # 3. CONTENT THIRD
+            if page == "Settings":
+                show_settings()
+            elif page == "Overview":
+                show_dashboard_view()
+            elif page == "Loans":
+                show_loans()
+            elif page == "Borrowers":
+                show_borrowers()
+            elif page == "Collateral":
+                show_collateral()
+            elif page == "Calendar":
+                show_calendar()
+            elif page == "Ledger":
+                show_ledger()
+            elif page == "Overdue Tracker":
+                show_overdue_tracker()
+            elif page == "Payments":
+                show_payments()
+            elif page == "Expenses":
+                show_expenses()
+            elif page == "Petty Cash":
+                show_petty_cash()
+            elif page == "Payroll":
+                show_payroll()
             else:
-                st.error("Database connection not initialized.")
-            
-            # CRITICAL: Stop execution here so guests don't see the dashboard
-            st.stop()
-
-        # ==============================
-        # 2. AUTHENTICATED SESSION SAFETY
-        # ==============================
-        # Only reached if logged_in == True. Checks if the user session is still valid.
-        check_session_timeout()
-
-        # ==============================
-        # 3. APPLY THEME (THEME PERSISTENCE)
-        # ==============================
-        # Ensures that even after a page refresh, the user's custom brand color is applied.
-        apply_master_theme()
-
-        # ==============================
-        # 4. SIDEBAR NAVIGATION
-        # ==============================
-        # render_sidebar handles the logout logic and page selection state
-        page = render_sidebar()
-
-        # ==============================
-        # 5. PAGE ROUTER (MAIN CONTENT)
-        # ==============================
-        # Each module is called based on the user's selection from the sidebar
-        if page == "Overview":
-            show_dashboard_view()
-
-        elif page == "Loans":
-            show_loans()
-
-        elif page == "Borrowers":
-            show_borrowers()
-
-        elif page == "Payments":
-            show_payments()
-
-        elif page == "Expenses":
-            show_expenses()
-
-        elif page == "Petty Cash":
-            show_petty_cash()
-
-        elif page == "Payroll":
-            show_payroll()
-
-        elif page == "Reports":
-            show_reports()
-            
-        elif page == "Settings":
-            show_settings()
-
-        elif page == "Collateral":
-            show_collateral()
-
-        elif page == "Calendar":
-            show_calendar()
-
-        elif page == "Ledger":
-            show_ledger()
-
-        else:
-            # Fallback for future modules or maintenance
-            st.info(f"📦 The '{page}' module is coming online soon.")
-
-    except Exception as e:
-        # Global error handler to prevent "White Screen of Death"
-        st.error("🚨 Application Error")
-        st.exception(e)
+                st.info(f"The {page} module is coming online soon.")
+                
+        except Exception as e:
+            st.error(f"Application Error: {e}")
