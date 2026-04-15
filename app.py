@@ -325,6 +325,66 @@ def login_page():
                 else:
                     record_failed_attempt(email)
                     st.error(result["error"])
+def signup_page(supabase):
+    import time
+    st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
+    
+    tenant_code = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
+    email = st.text_input("📧 Email", key="signup_email").strip().lower()
+    password = st.text_input("🔑 Password", type="password", key="signup_pass")
+
+    if st.button("🚀 Create Account", use_container_width=True):
+        if not all([tenant_code, email, password]):
+            st.warning("⚠️ Please fill all fields.")
+        else:
+            try:
+                # 1. TENANT CHECK
+                check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
+                if check.data:
+                    tenant_id = check.data[0]['id']
+                else:
+                    new_t = supabase.table("tenants").insert({
+                        "company_code": tenant_code,
+                        "name": tenant_code.capitalize()
+                    }).execute()
+                    tenant_id = new_t.data[0]['id']
+
+                # 2. AUTH SIGNUP
+                res = supabase.auth.sign_up({
+                    "email": email,
+                    "password": password,
+                    "options": {"data": {"tenant_id": str(tenant_id), "role": "Admin"}}
+                })
+
+                if res.user:
+                    user_data = {
+                        "id": res.user.id,
+                        "tenant_id": str(tenant_id),
+                        "role": "Admin",
+                        "full_name": email.split('@')[0].capitalize()
+                    }
+
+                    try:
+                        supabase.table("users").insert(user_data).execute()
+                        st.success("✅ SUCCESS! Account created.")
+                        time.sleep(1)
+                        st.session_state.view = "login"
+                        st.rerun()
+                    except Exception as db_err:
+                        if "23505" in str(db_err):
+                            st.info("👋 Account exists. Redirecting...")
+                            time.sleep(1)
+                            st.session_state.view = "login"
+                            st.rerun()
+                        else:
+                            st.error(f"🚨 Profile Error: {str(db_err)}")
+
+            except Exception as e:
+                st.error(f"🚨 Signup Error: {str(e)}")
+
+    if st.button("⬅️ Back to Login", key="signup_back_final"):
+        st.session_state.view = "login"
+        st.rerun()
 
 
 # ==============================
@@ -908,6 +968,56 @@ def show_loans():
                             st.rerun()
                     else:
                         st.error("Please enter a principal amount greater than 0.")
+
+    # ==============================
+    # TAB: ACTIONS (The Rollover Engine)
+    # ==============================
+    with tab_actions:
+        st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
+        
+        if loans_df.empty:
+            st.info("No active loans to roll over.")
+        else:
+            eligible_loans = loans_df[loans_df["status"] != "Closed"]
+            
+            if eligible_loans.empty:
+                st.success("All loans are currently settled! ✨")
+            else:
+                roll_sel = st.selectbox("Select Loan to Roll Over", eligible_loans["id"].unique())
+                loan_to_roll = eligible_loans[eligible_loans["id"] == roll_sel].iloc[0]
+                
+                st.warning(f"You are rolling over Loan #{roll_sel}")
+                
+                current_unpaid = loan_to_roll['balance']
+                new_interest_rate = st.number_input("New Monthly Interest (%)", value=10.0)
+                
+                if st.button("🔥 Execute Rollover", use_container_width=True):
+                    # --- ALL LOGIC BELOW MUST BE INDENTED ---
+                    # 1. Update old loan
+                    supabase.table("loans").update({"status": "Rolled"}).eq("id", loan_to_roll['id']).execute()
+                    
+                    # 2. Create New Entry
+                    t_id = st.session_state.get('tenant_id', 'default-admin')
+                    
+                    import random
+                    new_label = f"ROLL-{random.randint(1000, 9999)}"
+
+                    new_cycle = pd.DataFrame([{
+                        "loan_id_label": new_label,
+                        "borrower_id": loan_to_roll['borrower_id'], 
+                        "principal": float(current_unpaid), 
+                        "interest": float(current_unpaid * (new_interest_rate / 100)),
+                        "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
+                        "amount_paid": 0.0,
+                        "status": "Active",
+                        "start_date": datetime.now().strftime("%Y-%m-%d"),
+                        "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                        "tenant_id": t_id 
+                    }])
+
+                    if save_data("loans", new_cycle):
+                        st.success(f"✅ Loan rolled over as {new_label}!")
+                        st.rerun()
 
     # ==============================
     # TAB: MANAGE
