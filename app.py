@@ -936,23 +936,57 @@ def show_loans():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            def style_loan_table(row):
-                status = str(row["status"])
-                colors = {"Active": "#4A90E2", "Closed": "#2E7D32", "Overdue": "#D32F2F", "BCF": "#FFA500"}
-                s_color = colors.get(status, "#666666")
+                        def style_loan_table(row):
+                # ✅ Normalize status (prevents DB mismatch issues)
+                status = str(row.get("status", "")).upper()
 
+                # ✅ Full color system (expandable + consistent)
+                colors = {
+                    "ACTIVE": "#4A90E2",     # Blue
+                    "CLOSED": "#2E7D32",     # Green
+                    "OVERDUE": "#D32F2F",    # Red
+                    "ROLLED": "#7B1FA2",     # Purple
+                    "BCF": "#FFA500",        # Orange
+                    "PENDING": "#FBC02D"     # Yellow
+                }
+
+                s_color = colors.get(status, "#9E9E9E")  # Default grey
+
+                # ✅ Base style for entire row
                 styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
-                status_idx = row.index.get_loc("status")
-                styles[status_idx] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px; text-align: center;'
+
+                # ✅ Safely locate status column
+                if "status" in row.index:
+                    status_idx = row.index.get_loc("status")
+
+                    styles[status_idx] = (
+                        f'background-color: {s_color}; '
+                        f'color: white; '
+                        f'font-weight: bold; '
+                        f'border-radius: 6px; '
+                        f'text-align: center; '
+                        f'padding: 4px;'
+                    )
+
                 return styles
 
-            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "start_date", "status"]
+
+            show_cols = [
+                "loan_id_label",
+                "borrower",
+                "principal",
+                "total_repayable",
+                "start_date",
+                "status"
+            ]
 
             st.dataframe(
-                loans_df[show_cols].style.format({
+                loans_df[show_cols].style
+                .format({
                     "principal": "{:,.0f}",
                     "total_repayable": "{:,.0f}"
-                }).apply(style_loan_table, axis=1),
+                })
+                .apply(style_loan_table, axis=1),
                 use_container_width=True,
                 hide_index=True
             )
@@ -998,7 +1032,7 @@ def show_loans():
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due), 
                         "amount_paid": 0.0,
-                        "status": "Active", 
+                        "status": "ACTIVE", 
                         "start_date": str(date_issued), 
                         "end_date": str(date_due),
                         "tenant_id": t_id
