@@ -2602,31 +2602,18 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# IMPORTANT: Ensure this is called in your main entry point before show_dashboard_view()
-# st.set_page_config(layout="wide") 
-
 def get_active_color():
     """Helper to get the current theme color for consistent UI styling."""
     return st.session_state.get('theme_color', '#1E3A8A')
-
-def show_overview():
-    """Standard Overview Page with Dynamic Branding."""
-    brand_color = get_active_color()
-    st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Loans", "0", "+0%")
-    col2.metric("Active Borrowers", "0", "0")
-    col3.metric("Revenue", "0 UGX", "0")
-    
-    st.info("👋 Welcome! Start by selecting a category from the sidebar.")
 
 def show_dashboard_view():
     """
     Main Dashboard view. 
     Upgraded: performance layer, safer finance engine, SaaS-safe computation.
     """
+    # 0. INITIALIZE THEME (Prevents NameError for brand_color)
     brand_color = get_active_color()
+    
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
 
     # --- 1. LOAD DATA ---
@@ -2652,20 +2639,17 @@ def show_dashboard_view():
 
     df_clean = df.copy()
 
-    # --- 3. SAFE UTILS (UPGRADE ENGINE) ---
-    def safe_numeric(df, col_list):
-        for col in col_list:
-            if df is not None and col in df.columns:
-                return pd.to_numeric(df[col], errors="coerce").fillna(0)
-        return pd.Series(0.0, index=df.index if df is not None else [])
+    # --- 3. SAFE UTILS ---
+    # Principal & Dates mapping
+    p_col = next((c for c in df_clean.columns if 'principal' in c), None)
+    d_col = next((c for c in df_clean.columns if 'date' in c and 'end' in c or 'due' in c), None)
+    stat_col = next((c for c in df_clean.columns if 'status' in c), None)
 
-    def safe_date(df, col_list):
-        for col in col_list:
-            if df is not None and col in df.columns:
-                return pd.to_datetime(df[col], errors="coerce")
-        return pd.NaT
+    df_clean["principal_clean"] = pd.to_numeric(df_clean[p_col], errors="coerce").fillna(0) if p_col else 0
+    df_clean["end_date_dt"] = pd.to_datetime(df_clean[d_col], errors="coerce") if d_col else pd.NaT
+    df_clean["status_clean"] = df_clean[stat_col].astype(str).str.title() if stat_col else "Active"
 
-    # --- 4. BORROWER MAPPING (OPTIMIZED) ---
+    # --- 4. BORROWER MAPPING ---
     bor_map = {}
     if bor_df is not None and not bor_df.empty:
         b_id = next((c for c in bor_df.columns if 'id' in c), None)
