@@ -703,6 +703,7 @@ def show_borrowers():
                 st.info("No matching borrowers found.")
         else:
             st.info("No borrowers registered yet.")
+            
 
     # ==============================
     # TAB 2: ADD (ID CONFLICT FIXED)
