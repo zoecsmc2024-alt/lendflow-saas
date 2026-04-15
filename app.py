@@ -15,6 +15,22 @@ from streamlit_calendar import calendar
 import bcrypt
 from twilio.rest import Client as TwilioClient
 import time
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+# 1. CORE DATA ENGINE (Must be at the top level)
+@st.cache_data(ttl=600)
+def get_cached_data(table_name):
+    """Fetches and caches data from Supabase for all pages."""
+    try:
+        # Use your existing supabase client connection here
+        response = supabase.table(table_name).select("*").execute()
+        return pd.DataFrame(response.data)
+    except Exception as e:
+        # This provides the error message you saw in your screenshots
+        st.error(f"Error fetching data from {table_name}: {e}")
+        return pd.DataFrame()
 
 # Move this to the absolute top to prevent "Set Page Config" errors
 st.set_page_config(
