@@ -885,9 +885,9 @@ def show_loans():
 
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
-    CLOSED_mask = loans_df["balance"] <= 0
-    loans_df.loc[CLOSED_mask, "status"] = "CLOSED"
-    loans_df.loc[CLOSED_mask, "balance"] = 0
+    closed_mask = loans_df["balance"] <= 0
+    loans_df.loc[closed_mask, "status"] = "CLOSED"
+    loans_df.loc[closed_mask, "balance"] = 0
 
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
@@ -901,7 +901,7 @@ def show_loans():
         def style_loan_table(row):
             status = str(row.get("status", "")).upper()
             colors = {
-                "Active": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
+                "ACTIVE": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
                 "ROLLED": "#7B1FA2", "BCF": "#FFA500", "PENDING": "#FBC02D"
             }
             s_color = colors.get(status, "#9E9E9E")
@@ -1003,7 +1003,7 @@ def show_loans():
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due), 
                         "amount_paid": 0.0,
-                        "status": "Active", 
+                        "status": "ACTIVE", 
                         "start_date": str(date_issued), 
                         "end_date": str(date_due),
                         "tenant_id": t_id
@@ -1054,7 +1054,7 @@ def show_loans():
                         "interest": float(current_unpaid * (new_interest_rate / 100)),
                         "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
                         "amount_paid": 0.0,
-                        "status": "Active",
+                        "status": "ACTIVE",
                         "start_date": datetime.now().strftime("%Y-%m-%d"),
                         "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
                         "tenant_id": t_id 
@@ -1075,7 +1075,7 @@ def show_loans():
                 c1, c2 = st.columns(2)
                 e_borr = c1.text_input("Borrower", value=loan_to_edit['borrower'])
                 e_princ = c1.number_input("Principal", value=float(loan_to_edit['principal']))
-                e_stat = c2.selectbox("Status", ["Active", "Pending", "CLOSED", "Overdue", "BCF"], index=0)
+                e_stat = c2.selectbox("Status", ["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF"], index=0)
                 
                 if st.form_submit_button("💾 Save Changes"):
                     update_data = pd.DataFrame([{
