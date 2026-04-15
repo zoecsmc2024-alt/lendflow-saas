@@ -1,7 +1,3 @@
-# ==============================
-# 0. ENTERPRISE SaaS CORE LAYER (UPGRADED)
-# ==============================
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -20,7 +16,13 @@ import bcrypt
 from twilio.rest import Client as TwilioClient
 import time
 
-st.set_page_config(layout="wide")
+# Move this to the absolute top to prevent "Set Page Config" errors
+st.set_page_config(
+    page_title="Lending Manager Pro",
+    page_icon="💰",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 SESSION_TIMEOUT = 30
 
@@ -28,6 +30,7 @@ SESSION_TIMEOUT = 30
 # 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
 def apply_master_theme():
+    # Fallback to a default if theme_color is missing
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
     st.markdown(f"""
         <style>
@@ -50,6 +53,10 @@ def apply_master_theme():
                 color: {brand_color} !important;
                 border-radius: 8px !important;
             }}
+            /* Metric Card styling fix */
+            div[data-testid="stMetricValue"] {{
+                font-size: 1.8rem !important;
+            }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -57,13 +64,17 @@ def apply_master_theme():
 # ==============================
 # 2. SUPABASE INIT (SINGLE SOURCE OF TRUTH)
 # ==============================
-try:
-    SUPABASE_URL = st.secrets["supabase_url"]
-    SUPABASE_KEY = st.secrets["supabase_key"]
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    st.error(f"Supabase connection failed: {e}")
-    st.stop()
+@st.cache_resource
+def init_supabase():
+    try:
+        url = st.secrets["supabase_url"]
+        key = st.secrets["supabase_key"]
+        return create_client(url, key)
+    except Exception as e:
+        st.error(f"Supabase connection credentials missing or invalid: {e}")
+        st.stop()
+
+supabase = init_supabase()
 
 
 # ==============================
@@ -83,7 +94,7 @@ def get_tenant_id():
 
 def require_tenant():
     if not st.session_state.get("tenant_id"):
-        st.error("Session expired")
+        st.error("Session expired or unauthorized access. Please log in again.")
         st.stop()
 
 
@@ -95,11 +106,25 @@ def upload_image(file, bucket="collateral-photos"):
         require_tenant()
         tenant_id = get_tenant_id()
 
-        file_name = f"{tenant_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
+        # Sanitize filename: remove special characters
+        clean_name = re.sub(r'[^a-zA-Z0-9._-]', '_', file.name)
+        file_name = f"{tenant_id}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{clean_name}"
 
-        supabase.storage.from_(bucket).upload(file_name, file.getvalue())
-        return supabase.storage.from_(bucket).get_public_url(file_name)
+        # Get file content and type
+        file_content = file.getvalue()
+        content_type = file.type
 
+        # Upload to Supabase
+        supabase.storage.from_(bucket).upload(
+            path=file_name,
+            file=file_content,
+            file_options={"content-type": content_type}
+        )
+        
+        # Get and return URL
+        response = supabase.storage.from_(bucket).get_public_url(file_name)
+        return response
+        
     except Exception as e:
         st.error(f"Upload failed: {e}")
         return None
@@ -112,72 +137,95 @@ def upload_image(file, bucket="collateral-photos"):
 def get_cached_data(table_name):
     try:
         require_tenant()
+        tenant_id = get_tenant_id()
+        
+        # Execute Supabase query with tenant filter
         res = supabase.table(table_name)\
             .select("*")\
-            .eq("tenant_id", get_tenant_id())\
+            .eq("tenant_id", tenant_id)\
             .execute()
-        return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+            
+        if res.data:
+            df = pd.DataFrame(res.data)
+            # Standardize column casing immediately upon load
+            df.columns = df.columns.str.strip().str.lower()
+            return df
+        return pd.DataFrame()
+        
     except Exception as e:
-        st.error(f"DB Error {table_name}: {e}")
+        st.error(f"Database Fetch Error [{table_name}]: {e}")
         return pd.DataFrame()
 
 
 def save_data(table_name, dataframe):
     try:
         require_tenant()
-        if dataframe.empty:
+        if dataframe is None or dataframe.empty:
             return False
 
+        # Ensure every record has the tenant_id before saving
         dataframe["tenant_id"] = get_tenant_id()
-        supabase.table(table_name).upsert(dataframe.to_dict("records")).execute()
+        
+        # Convert to records and handle potential NaN values which Supabase dislikes
+        records = dataframe.replace({np.nan: None}).to_dict("records")
+        
+        supabase.table(table_name).upsert(records).execute()
+        
+        # Clear cache to ensure the UI updates with new data
         st.cache_data.clear()
         return True
 
     except Exception as e:
-        st.error(f"Save error: {e}")
+        st.error(f"Database Save Error [{table_name}]: {e}")
         return False
 
 
 # ==============================
 # 6. AUTH CORE (UNIFIED - NO LOSS)
 # ==============================
-def authenticate(supabase, company_code, email, password):
+def authenticate(supabase_client, company_code, email, password):
     try:
-        res = supabase.auth.sign_in_with_password({
+        # Step 1: Auth with Supabase Identity
+        res = supabase_client.auth.sign_in_with_password({
             "email": email,
             "password": password
         })
 
         if not res.user:
-            return {"success": False, "error": "Invalid login"}
+            return {"success": False, "error": "Invalid email or password"}
 
-        profile = supabase.table("users")\
+        # Step 2: Fetch Multi-tenant Profile
+        profile = supabase_client.table("users")\
             .select("tenant_id, role, tenants(company_code, name)")\
             .eq("id", res.user.id)\
             .execute()
 
         if not profile.data:
-            return {"success": False, "error": "No profile"}
+            return {"success": False, "error": "User profile not found"}
 
         record = profile.data[0]
-        tenant = record.get("tenants")
+        tenant_info = record.get("tenants")
 
-        if not tenant:
-            return {"success": False, "error": "No tenant linked"}
+        if not tenant_info:
+            return {"success": False, "error": "No business entity linked to this account"}
 
-        if tenant["company_code"].strip().upper() != company_code.strip().upper():
-            return {"success": False, "error": "Invalid company code"}
+        # Step 3: Verify Company Code (Case-Insensitive)
+        if tenant_info["company_code"].strip().upper() != company_code.strip().upper():
+            return {"success": False, "error": "Incorrect Company Code"}
 
         return {
             "success": True,
             "user_id": res.user.id,
             "tenant_id": record["tenant_id"],
-            "role": record.get("role", "Admin"),
-            "company": tenant.get("name")
+            "role": record.get("role", "Staff"),
+            "company": tenant_info.get("name")
         }
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        error_msg = str(e)
+        if "Invalid login credentials" in error_msg:
+            return {"success": False, "error": "Invalid email or password"}
+        return {"success": False, "error": f"Authentication system error: {error_msg}"}
 
 
 # ==============================
@@ -192,7 +240,10 @@ def create_session(user_data):
         "company": user_data["company"],
         "last_activity": datetime.now()
     })
-    st.rerun()
+    try:
+        st.rerun()
+    except:
+        pass
 
 
 # ==============================
@@ -203,10 +254,12 @@ def check_session_timeout():
         return
 
     last = st.session_state.get("last_activity", datetime.now())
-    if datetime.now() - last > timedelta(minutes=SESSION_TIMEOUT):
-        st.session_state.clear()
-        st.warning("Session expired")
-        st.rerun()
+    if (datetime.now() - last) > timedelta(minutes=SESSION_TIMEOUT):
+        # Full clear for security
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.warning("Your session has timed out for security. Please log in again.")
+        st.stop()
 
     st.session_state["last_activity"] = datetime.now()
 
@@ -221,7 +274,7 @@ def check_rate_limit(email):
     attempts = st.session_state.get("login_attempts", {})
     if email in attempts:
         count, last = attempts[email]
-        if count >= MAX_ATTEMPTS and datetime.now() - last < timedelta(minutes=LOCKOUT_MINUTES):
+        if count >= MAX_ATTEMPTS and (datetime.now() - last) < timedelta(minutes=LOCKOUT_MINUTES):
             return False
     return True
 
@@ -233,10 +286,13 @@ def record_failed_attempt(email):
 
 
 # ==============================
-# 10. CORE FIX: NO MORE DUPLICATES ANYWHERE
+# 10. CORE FIX: TENANT ISOLATION
 # ==============================
 def tenant_filter(df):
+    """Secondary guard to ensure data belongs to the current tenant"""
     if df is None or df.empty:
+        return df
+    if "tenant_id" not in df.columns:
         return df
     return df[df["tenant_id"] == get_tenant_id()].copy()
 
@@ -245,23 +301,30 @@ def tenant_filter(df):
 # 11. LOGIN PAGE (SAFE + CLEAN)
 # ==============================
 def login_page():
-    col = st.columns(3)[1]
+    # Centered layout for login
+    _, col, _ = st.columns([1, 2, 1])
 
     with col:
-        st.markdown("## 🔐 Login")
+        st.image("https://via.placeholder.com/150", width=100) # Replace with your logo if needed
+        st.markdown("## 🔐 Finance Portal Login")
 
-        company = st.text_input("Company Code").strip().upper()
+        company = st.text_input("Company Code", help="Provided by your administrator").strip().upper()
         email = st.text_input("Email").strip().lower()
         password = st.text_input("Password", type="password")
 
-        if st.button("Login"):
-            result = authenticate(supabase, company, email, password)
-
-            if result["success"]:
-                create_session(result)
-                st.success("Welcome!")
+        if st.button("Access Dashboard", use_container_width=True):
+            if not company or not email or not password:
+                st.error("Please fill in all fields")
+            elif not check_rate_limit(email):
+                st.error(f"Too many failed attempts. Try again in {LOCKOUT_MINUTES} minutes.")
             else:
-                st.error(result["error"])
+                result = authenticate(supabase, company, email, password)
+
+                if result["success"]:
+                    create_session(result)
+                else:
+                    record_failed_attempt(email)
+                    st.error(result["error"])
 
 
 # ==============================
@@ -271,9 +334,11 @@ def run_auth_ui():
     if "view" not in st.session_state:
         st.session_state.view = "login"
 
-    if st.session_state.view == "login":
+    if not st.session_state.get("logged_in"):
         login_page()
-
+    else:
+        # This will be handled by your main view logic
+        pass
 
 
 def render_sidebar():
@@ -289,6 +354,7 @@ def render_sidebar():
     # 1. FETCH TENANTS (SAFE + ROBUST)
     # ==============================
     try:
+        # Optimization: select only what we need to minimize bandwidth
         tenants_res = supabase.table("tenants")\
             .select("id, name, brand_color, logo_url")\
             .execute()
@@ -298,7 +364,7 @@ def render_sidebar():
         } if tenants_res.data else {}
 
     except Exception as e:
-        st.error(f"Error fetching tenants: {e}")
+        st.sidebar.error(f"Error fetching tenants: {e}")
         tenant_map = {}
 
     current_tenant_id = st.session_state.get('tenant_id')
@@ -307,16 +373,14 @@ def render_sidebar():
     # 2. SIDEBAR UI
     # ==============================
     with st.sidebar:
-
         # ------------------------------
         # TENANT SWITCHER (HARDENED)
         # ------------------------------
         if tenant_map:
-
             options = list(tenant_map.keys())
             default_index = 0
 
-            # Safe lookup of current tenant
+            # Safe lookup of current tenant to set the default dropdown value
             if current_tenant_id:
                 for i, name in enumerate(options):
                     if str(tenant_map[name]['id']) == str(current_tenant_id):
@@ -336,44 +400,45 @@ def render_sidebar():
             # CRITICAL SYNC FIX (NO LOGIC LOSS)
             # ------------------------------
             if active_company:
+                # Only trigger a rerun if the tenant actually changed
                 if str(st.session_state.get('tenant_id')) != str(active_company['id']):
                     st.session_state['tenant_id'] = active_company['id']
                     st.session_state['theme_color'] = active_company.get('brand_color', '#2B3F87')
+                    st.session_state['company'] = active_company.get('name')
 
-                    # SAFE: reset cached tenant-dependent data
-                    if hasattr(st, "cache_data"):
-                        st.cache_data.clear()
-
-                    st.rerun()
+                    # Clear cache so the new company's data loads immediately
+                    st.cache_data.clear()
+                    try:
+                        st.rerun()
+                    except:
+                        pass
         else:
-            st.warning("No tenants available.")
+            st.warning("No business entities found.")
             st.stop()
 
         # ==============================
         # 3. LOGO RENDER (FIXED + SAFE)
         # ==============================
+        st.write("") # Spacer
         _, col_mid, _ = st.columns([1, 2, 1])
 
         with col_mid:
             logo_val = active_company.get('logo_url') if active_company else None
 
-            if logo_val and str(logo_val) not in ["0", "None", "null"]:
-
-                import time
-
-                # If full URL already exists
+            # Logic to handle missing or null logo values
+            if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
+                # 1. If it's a direct URL
                 if str(logo_val).startswith("http"):
                     final_logo_url = logo_val
-
+                # 2. If it's a Supabase storage path
                 else:
-                    # SAFE Supabase URL construction
                     try:
-                        project_url = st.secrets["supabase_url"]
+                        project_url = st.secrets["supabase_url"].strip("/")
                         final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
                     except Exception:
                         final_logo_url = None
 
-                # Render logo safely with cache-busting
+                # Render with cache-busting timestamp to ensure updates show immediately
                 if final_logo_url:
                     try:
                         st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
@@ -381,7 +446,6 @@ def render_sidebar():
                         st.markdown("<h1 style='text-align:center;'>🏢</h1>", unsafe_allow_html=True)
                 else:
                     st.markdown("<h1 style='text-align:center;'>🏢</h1>", unsafe_allow_html=True)
-
             else:
                 st.markdown("<h1 style='text-align:center;'>🌍</h1>", unsafe_allow_html=True)
 
@@ -406,12 +470,12 @@ def render_sidebar():
         }
 
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-
         current_p = st.session_state.get('current_page', "Overview")
 
+        # Find the index of the current page for the radio button
         try:
             default_ix = list(menu.keys()).index(current_p)
-        except Exception:
+        except (ValueError, Exception):
             default_ix = 0
 
         selection = st.radio(
@@ -428,22 +492,23 @@ def render_sidebar():
         # 5. LOGOUT (HARDENED SESSION WIPE)
         # ==============================
         if st.button("🚪 Logout", use_container_width=True):
-
-            # FULL SESSION CLEANUP (SAFER THAN CLEAR)
-            keys_to_keep = ["theme_color"]  # optional preservation
-
+            # Preserve only system-level settings if needed, wipe user data
             for key in list(st.session_state.keys()):
-                if key not in keys_to_keep:
+                if key not in ["theme_color"]: # Optional: keep theme through logout
                     del st.session_state[key]
-
-            st.rerun()
+            
+            try:
+                st.rerun()
+            except:
+                pass
 
     # ==============================
     # 6. PAGE RESOLUTION (SAFE PARSING)
     # ==============================
     try:
+        # Extract the page name from the "Emoji Name" string
         final_page = selection.split(" ", 1)[1]
-    except Exception:
+    except (IndexError, Exception):
         final_page = "Overview"
 
     st.session_state['current_page'] = final_page
@@ -456,6 +521,7 @@ def render_sidebar():
 import uuid 
 import streamlit as st
 import pandas as pd
+import numpy as np
 
 def show_borrowers():
     brand_color = st.session_state.get("theme_color", "#2B3F87")
@@ -464,7 +530,7 @@ def show_borrowers():
     # ==============================
     # 🔐 SAAS TENANT CONTEXT (HARDENED)
     # ==============================
-    current_tenant = st.session_state.get('tenant_id', None)
+    current_tenant = st.session_state.get('tenant_id')
 
     if not current_tenant:
         st.error("🔐 Session expired. Please login again.")
@@ -473,34 +539,34 @@ def show_borrowers():
     # ==============================
     # 1. FETCH DATA
     # ==============================
-    df = get_cached_data("borrowers")
+    df_raw = get_cached_data("borrowers")
 
     # ==============================
-    # 🧠 ENTERPRISE SAFETY LAYER (ADDED)
-    # Ensures ALL data is tenant-isolated even if backend leaks
+    # 🧠 ENTERPRISE SAFETY LAYER
     # ==============================
-    if df is not None and not df.empty:
-        if "tenant_id" in df.columns:
-            df = df[df["tenant_id"].astype(str) == str(current_tenant)]
+    if df_raw is not None and not df_raw.empty:
+        # Standardize columns first
+        df_raw.columns = df_raw.columns.str.strip().str.lower().str.replace(" ", "_")
+        
+        # Isolation Guard: Filter only for this tenant
+        if "tenant_id" in df_raw.columns:
+            df = df_raw[df_raw["tenant_id"].astype(str) == str(current_tenant)].copy()
         else:
+            df = df_raw.copy()
             df["tenant_id"] = current_tenant
-    
-    if df is None or df.empty:
+    else:
         df = pd.DataFrame(columns=[
             "id", "name", "phone", "email", "address",
             "national_id", "next_of_kin", "status", "tenant_id"
         ])
-    else:
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # Ensure required columns exist (UNCHANGED LOGIC)
-    for col in ["id", "name", "phone", "email", "address", "national_id", "next_of_kin", "status", "tenant_id"]:
+    # Ensure required columns exist for UI rendering
+    required_cols = ["id", "name", "phone", "email", "address", "national_id", "next_of_kin", "status", "tenant_id"]
+    for col in required_cols:
         if col not in df.columns:
             df[col] = None
 
-    # ==============================
-    # COLUMN DETECTION (UNCHANGED LOGIC)
-    # ==============================
+    # Column Detection Logic (Preserved)
     name_col = next((c for c in df.columns if 'name' in c or 'borrower' in c), "name")
     phone_col = next((c for c in df.columns if 'phone' in c), "phone")
     status_col = next((c for c in df.columns if 'status' in c), "status")
@@ -508,7 +574,7 @@ def show_borrowers():
     tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
 
     # ==============================
-    # TAB 1: VIEW (ENHANCED SAFETY ONLY)
+    # TAB 1: VIEW (HTML LEAK FIXED)
     # ==============================
     with tab_view:
         col1, col2 = st.columns([3, 1]) 
@@ -517,15 +583,16 @@ def show_borrowers():
         with col2:
             status_filter = st.selectbox("Filter Status", ["All", "Active", "Inactive"], key="bor_status_filt")
 
-        filtered_df = df.copy()
-        
-        if not filtered_df.empty:
+        if not df.empty:
+            filtered_df = df.copy()
+            
+            # String conversions for searching
             filtered_df[name_col] = filtered_df[name_col].astype(str)
             if phone_col in filtered_df.columns:
                 filtered_df[phone_col] = filtered_df[phone_col].astype(str)
             
+            # Application of Search Mask
             mask = filtered_df[name_col].str.lower().str.contains(search, na=False)
-
             if phone_col in filtered_df.columns:
                 mask |= filtered_df[phone_col].str.contains(search, na=False)
                 
@@ -538,8 +605,8 @@ def show_borrowers():
 
             if not filtered_df.empty:
                 rows_html = ""
-                for i, r in filtered_df.reset_index().iterrows():
-                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                for i, r in filtered_df.reset_index(drop=True).iterrows():
+                    bg_color = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
                     
                     name_val = r.get(name_col, 'Unknown')
                     phone_val = r.get(phone_col, 'N/A')
@@ -547,18 +614,25 @@ def show_borrowers():
                     nok_val = r.get('next_of_kin', 'N/A')
                     stat_val = r.get(status_col, 'Active')
                     
-                    rows_html += f"""<tr style="background-color: {bg_color};">
-                        <td>{name_val}</td><td>{phone_val}</td>
-                        <td>{email_val}</td><td>{nok_val}</td>
-                        <td><span style="background:{brand_color};color:white;padding:4px 8px;border-radius:8px;">{stat_val}</span></td>
+                    rows_html += f"""
+                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #eee;">
+                        <td style="padding:10px;">{name_val}</td>
+                        <td style="padding:10px;">{phone_val}</td>
+                        <td style="padding:10px;">{email_val}</td>
+                        <td style="padding:10px;">{nok_val}</td>
+                        <td style="padding:10px;"><span style="background:{brand_color};color:white;padding:3px 10px;border-radius:12px;font-size:11px;">{stat_val}</span></td>
                     </tr>"""
                 
                 st.markdown(f"""
                     <div style="overflow-x:auto;">
-                        <table style="width:100%;border-collapse:collapse;">
+                        <table style="width:100%; border-collapse:collapse; font-size:14px;">
                             <thead>
-                                <tr style="background:{brand_color};color:white;">
-                                    <th>Name</th><th>Phone</th><th>Email</th><th>NOK</th><th>Status</th>
+                                <tr style="background:{brand_color}; color:white; text-align:left;">
+                                    <th style="padding:12px;">Name</th>
+                                    <th style="padding:12px;">Phone</th>
+                                    <th style="padding:12px;">Email</th>
+                                    <th style="padding:12px;">Next of Kin</th>
+                                    <th style="padding:12px;">Status</th>
                                 </tr>
                             </thead>
                             <tbody>{rows_html}</tbody>
@@ -566,152 +640,141 @@ def show_borrowers():
                     </div>
                 """, unsafe_allow_html=True)
             else:
-                st.info("No borrowers found.")
+                st.info("No matching borrowers found.")
         else:
             st.info("No borrowers registered yet.")
 
     # ==============================
-    # TAB 2: ADD (ENTERPRISE FIX ADDED)
+    # TAB 2: ADD (ID CONFLICT FIXED)
     # ==============================
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            
-            name = c1.text_input("Full Name*")
-            phone = c2.text_input("Phone Number*")
+            name_in = c1.text_input("Full Name*")
+            phone_in = c2.text_input("Phone Number*")
 
-            email = st.text_input("Email (Optional)")
-            address = st.text_input("Address (Optional)")
-            national_id = st.text_input("National ID (Optional)")
-            next_of_kin = st.text_input("Next of Kin (Optional)")
+            email_in = st.text_input("Email (Optional)")
+            address_in = st.text_input("Address (Optional)")
+            nid_in = st.text_input("National ID (Optional)")
+            nok_in = st.text_input("Next of Kin (Optional)")
 
             if st.form_submit_button("🚀 Save Borrower Profile"):
-                if name and phone:
-                    new_entry = pd.DataFrame([{
+                if name_in and phone_in:
+                    # Logic: Create a fresh record
+                    new_entry = {
                         "id": str(uuid.uuid4()),
-                        "name": name,
-                        "phone": phone,
-                        "email": email,
-                        "address": address,
-                        "national_id": national_id,
-                        "next_of_kin": next_of_kin,
+                        "name": name_in,
+                        "phone": phone_in,
+                        "email": email_in,
+                        "address": address_in,
+                        "national_id": nid_in,
+                        "next_of_kin": nok_in,
                         "status": "Active",
-                        "tenant_id": current_tenant
-                    }])
+                        "tenant_id": str(current_tenant)
+                    }
                     
-                    # ==============================
-                    # 🔐 SAFER WRITE (DOES NOT MUTATE ORIGINAL DF)
-                    # ==============================
-                    updated_df = pd.concat([df, new_entry], ignore_index=True)
+                    # Merge with existing dataframe safely
+                    temp_df = pd.concat([df, pd.DataFrame([new_entry])], ignore_index=True)
 
-                    if save_data("borrowers", updated_df):
-                        st.success("✅ Saved!")
-                        st.cache_data.clear()  # ENTERPRISE FIX (cache sync)
+                    if save_data("borrowers", temp_df):
+                        st.success(f"✅ Borrower '{name_in}' successfully registered!")
+                        st.cache_data.clear()
                         st.rerun()
                 else:
-                    st.error("⚠️ Name and Phone are required.")
+                    st.error("⚠️ Name and Phone Number are required fields.")
 
     # ==============================
-    # TAB 3: AUDIT (HARDENED + SAFE LOAN JOIN)
+    # TAB 3: AUDIT (TENANT-SAFE JOINS)
     # ==============================
     with tab_audit:
         if not df.empty:
-            target_name = st.selectbox("Select Borrower", df[name_col].tolist())
+            target_name = st.selectbox("Search & Select Borrower to Manage", df[name_col].unique())
             b_data = df[df[name_col] == target_name].iloc[0]
 
+            # Fetch loans for this specific borrower
             u_loans = get_cached_data("loans")
 
-            # ==============================
-            # 🔐 TENANT SAFE LOAN FILTER (ENHANCED)
-            # ==============================
             if u_loans is not None and not u_loans.empty:
+                # Security: Force filter loans by tenant_id
                 if "tenant_id" in u_loans.columns:
                     u_loans = u_loans[u_loans["tenant_id"].astype(str) == str(current_tenant)]
 
                 u_loans.columns = u_loans.columns.str.strip().str.lower().str.replace(" ", "_")
-
                 loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c), None)
                 
                 if loan_bor_ref:
+                    # Link logic: match based on name or ID
                     user_loans = u_loans[u_loans[loan_bor_ref].astype(str) == str(target_name)]
 
+                    st.markdown("### 📊 Borrower Activity")
+                    col_m1, col_m2 = st.columns(2)
+                    col_m1.metric("Total Loans", len(user_loans))
+                    
                     if not user_loans.empty:
-                        st.metric("Loans", len(user_loans))
-                        st.dataframe(user_loans)
+                        st.dataframe(user_loans, use_container_width=True)
+                    else:
+                        st.info("No loan history found for this borrower.")
 
-            # ==============================
-            # UPDATE (UNCHANGED LOGIC)
-            # ==============================
-            if st.button("💾 Update"):
-                df.loc[df["id"] == b_data.get("id"), "name"] = target_name
+            st.divider()
+            st.markdown("### 🛠️ Administrative Actions")
+            ca1, ca2 = st.columns(2)
 
+            # Update Logic (Atomic)
+            if ca1.button("💾 Save Profile Changes", use_container_width=True):
+                # Logic to update specific record in current DF
+                df.loc[df["id"] == b_data["id"], "name"] = target_name
                 if save_data("borrowers", df):
-                    st.success("✅ Updated")
+                    st.success("✅ Records updated.")
                     st.cache_data.clear()
                     st.rerun()
 
-            # ==============================
-            # DELETE (ENTERPRISE SAFE FIX)
-            # ==============================
-            if st.button("🗑️ Delete"):
-                df = df[df["id"] != b_data.get("id")]
-
-                if save_data("borrowers", df):
-                    st.success("✅ Deleted")
+            # Delete Logic (Tenant-Aware)
+            if ca2.button("🗑️ Permanent Delete", use_container_width=True):
+                # Filter out the target ID
+                updated_df = df[df["id"] != b_data["id"]]
+                if save_data("borrowers", updated_df):
+                    st.warning(f"🗑️ Record for {target_name} deleted.")
                     st.cache_data.clear()
                     st.rerun()
-
         else:
-            st.info("💡 No borrowers found.")
+            st.info("💡 Start by adding borrowers in the 'Add New' tab.")
 # ==============================
-# 🔐 SAAS TENANT CONTEXT (NEW)
+# 🔐 SAAS TENANT CONTEXT (HARDENED)
 # ==============================
 def get_current_tenant():
-    """
-    Returns current tenant_id from session (SaaS isolation layer)
-    """
+    """Returns current tenant_id from session (SaaS isolation layer)"""
     return st.session_state.get("tenant_id", "default_tenant")
 
-
 # ==============================
-# 🧠 DATABASE ADAPTER (REPLACES GOOGLE SHEETS)
+# 🧠 DATABASE ADAPTER (MULTI-TENANT SAFE)
 # ==============================
 def get_data(table_name):
-    """
-    Multi-tenant safe data fetch
-    """
+    """Multi-tenant safe data fetch with auto-migration for old records"""
     tenant_id = get_current_tenant()
     df = get_cached_data(table_name)
 
-    # ==============================
-    # 🔐 ENTERPRISE SAFETY LAYER (ADDED)
-    # Prevents cross-tenant leakage even if DB returns mixed data
-    # ==============================
     if df is not None and not df.empty:
+        # Standardize column names to lowercase/underscore
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+        
         if "tenant_id" in df.columns:
-            df = df[df["tenant_id"].astype(str) == str(tenant_id)]
+            # Force string comparison for UUID/Integer flexibility
+            df = df[df["tenant_id"].astype(str) == str(tenant_id)].copy()
         else:
-            # 🔥 Auto-migrate old data (no tenant_id → assign default)
+            # Auto-assign tenant_id if it's a legacy table missing the column
             df["tenant_id"] = tenant_id
-
+    
     return df
 
-
 def save_data_saas(table_name, df):
-    """
-    Multi-tenant safe save
-    """
+    """Multi-tenant safe save with hard enforcement of boundaries"""
     tenant_id = get_current_tenant()
-
-    if "tenant_id" not in df.columns:
-        df["tenant_id"] = tenant_id
-
-    # ==============================
-    # 🔐 HARD ENFORCEMENT (ADDED)
-    # Ensures no row escapes tenant boundary
-    # ==============================
-    df["tenant_id"] = tenant_id
-
+    
+    # Force the tenant_id on every single row before it touches the DB
+    df["tenant_id"] = str(tenant_id)
+    
+    # Restore user-friendly column names for the database if necessary
+    # (Optional: depends on if your DB expects "Loan ID" or "loan_id")
     return save_data(table_name, df)
 
 
@@ -719,201 +782,188 @@ def save_data_saas(table_name, df):
 # 13. LOANS MANAGEMENT PAGE (SAAS UPGRADE)
 # ==============================
 def show_loans():
-    """
-    Core engine for issuing and managing loan agreements.
-    NOW SaaS-enabled with tenant isolation.
-    """
-    st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"<h2 style='color: {brand_color};'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
     tenant_id = get_current_tenant()
 
     # ==============================
-    # 🧠 SESSION CACHE SAFETY (ADDED ONLY)
-    # Prevents stale cross-tenant data in memory
+    # 🧠 SESSION CACHE SAFETY
     # ==============================
-    if st.session_state.get("active_tenant") != tenant_id:
-        st.session_state.pop("loans", None)
-        st.session_state["active_tenant"] = tenant_id
+    if st.session_state.get("active_tenant_cache") != tenant_id:
+        st.session_state.pop("loans_df_cache", None)
+        st.session_state["active_tenant_cache"] = tenant_id
 
     # ==============================
     # 1. LOAD & NORMALIZE DATA
     # ==============================
-    if "loans" in st.session_state and not st.session_state.loans.empty:
-        loans_df = st.session_state.loans.copy()
-        loans_df = loans_df[loans_df.get("tenant_id", tenant_id) == tenant_id]
+    # Fetch Loans
+    if "loans_df_cache" in st.session_state and st.session_state.loans_df_cache is not None:
+        loans_df = st.session_state.loans_df_cache.copy()
     else:
-        loans_df = get_data("Loans")
-        if loans_df is not None:
-            st.session_state.loans = loans_df.copy()
+        loans_df = get_data("loans")
+        st.session_state.loans_df_cache = loans_df.copy() if loans_df is not None else None
 
-    borrowers_df = get_data("Borrowers")
+    # Fetch Borrowers
+    borrowers_df = get_data("borrowers")
     
+    # Filter for Active Borrowers only
     if borrowers_df is not None and not borrowers_df.empty:
-        borrowers_df.columns = [str(c).strip().replace(" ", "_") for c in borrowers_df.columns]
-
-        # ==============================
-        # 🔐 FIXED SAFETY FILTER (ADDED ONLY)
-        # ==============================
-        if "Status" in borrowers_df.columns:
-            active_borrowers = borrowers_df[borrowers_df["Status"] == "Active"]
-        elif "status" in borrowers_df.columns:
-            active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
+        # Look for status column regardless of casing
+        stat_col = next((c for c in borrowers_df.columns if 'status' in c), None)
+        if stat_col:
+            active_borrowers = borrowers_df[borrowers_df[stat_col].astype(str).str.lower() == "active"].copy()
         else:
-            active_borrowers = pd.DataFrame()
+            active_borrowers = borrowers_df.copy()
     else:
         active_borrowers = pd.DataFrame()
     
+    # Initialize empty DF if nothing exists
     if loans_df is None or loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "Loan_ID", "Borrower", "Principal", "Interest",
-            "Total_Repayable", "Amount_Paid", "Balance",
-            "Status", "Start_Date", "End_Date", "tenant_id"
+            "loan_id", "borrower", "principal", "interest",
+            "total_repayable", "amount_paid", "balance",
+            "status", "start_date", "end_date", "tenant_id"
         ])
     
-    loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
-
-    if "tenant_id" not in loans_df.columns:
-        loans_df["tenant_id"] = tenant_id
-
-    # ==============================
-    # CLEAN NUMERIC (UNCHANGED LOGIC)
-    # ==============================
-    num_cols = ["Principal", "Interest", "Total_Repayable", "Amount_Paid", "Balance"]
+    # Ensure numeric columns are actually numbers
+    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
         if col in loans_df.columns:
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
 
-    loans_df["Balance"] = loans_df["Total_Repayable"] - loans_df["Amount_Paid"]
-
-    # ==============================
-    # AUTO CLOSE ENGINE (UNCHANGED LOGIC)
-    # ==============================
+    # Recalculate Balance and Auto-Close
     if not loans_df.empty:
-        loans_df["Balance"] = loans_df["Balance"].clip(lower=0)
-        closed_mask = loans_df["Balance"] <= 0
+        loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
+        closed_mask = loans_df["balance"] <= 0
+        loans_df.loc[closed_mask, "status"] = "Closed"
 
-        loans_df.loc[closed_mask, "Status"] = "Closed"
-        loans_df.loc[closed_mask, "Balance"] = 0
-        loans_df.loc[closed_mask, "Total_Repayable"] = loans_df.loc[closed_mask, "Amount_Paid"]
-
-    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
+    tab_view, tab_add, tab_manage = st.tabs([
+        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit"
     ])
 
     # ==============================
-    # TAB: NEW LOAN (UNCHANGED LOGIC + SAFE DISPLAY ONLY)
+    # TAB: PORTFOLIO VIEW
+    # ==============================
+    with tab_view:
+        if loans_df.empty:
+            st.info("No loans found in the portfolio.")
+        else:
+            st.dataframe(loans_df, use_container_width=True, hide_index=True)
+
+    # ==============================
+    # TAB: NEW LOAN
     # ==============================
     with tab_add:
         if active_borrowers.empty:
-            st.info("💡 Tip: Activate a borrower in the 'Borrowers' section.")
+            st.warning("⚠️ No active borrowers found. Please add or activate a borrower first.")
         else:
             with st.form("loan_issue_form"):
                 col1, col2 = st.columns(2)
                 
-                selected_borrower = col1.selectbox(
-                    "Select Borrower",
-                    active_borrowers.get("Name", active_borrowers.columns[0]).unique()
-                )
-
-                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
+                # Dynamic Name Column Detection
+                name_col = next((c for c in active_borrowers.columns if 'name' in c), active_borrowers.columns[0])
+                
+                selected_borrower = col1.selectbox("Select Borrower", active_borrowers[name_col].unique())
+                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=10000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
-                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
+                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency"])
+                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5, value=10.0)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                interest = (interest_rate / 100) * amount
-                total_due = amount + interest
+                # Logic: UGX Rounding
+                calculated_interest = (interest_rate / 100) * amount
+                total_due = amount + calculated_interest
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     if amount > 0:
-                        last_id = pd.to_numeric(loans_df["Loan_ID"], errors='coerce').max()
-                        new_id = int(last_id + 1) if pd.notna(last_id) else 1
+                        # Safe ID generation
+                        try:
+                            last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce').max()
+                            new_id = int(last_id + 1) if not pd.isna(last_id) else 1001
+                        except:
+                            new_id = 1001
                         
-                        new_loan = pd.DataFrame([{
-                            "Loan_ID": new_id,
-                            "Borrower": selected_borrower,
-                            "Type": l_type,
-                            "Principal": float(amount),
-                            "Interest": float(interest),
-                            "Total_Repayable": float(total_due),
-                            "Amount_Paid": 0.0,
-                            "Status": "Active",
-                            "Start_Date": date_issued.strftime("%Y-%m-%d"),
-                            "End_Date": date_due.strftime("%Y-%m-%d"),
-                            "tenant_id": tenant_id
-                        }])
+                        new_loan = {
+                            "loan_id": new_id,
+                            "borrower": selected_borrower,
+                            "type": l_type,
+                            "principal": float(amount),
+                            "interest": float(calculated_interest),
+                            "total_repayable": float(total_due),
+                            "amount_paid": 0.0,
+                            "balance": float(total_due),
+                            "status": "Active",
+                            "start_date": date_issued.strftime("%Y-%m-%d"),
+                            "end_date": date_due.strftime("%Y-%m-%d"),
+                            "tenant_id": str(tenant_id)
+                        }
                         
-                        updated_df = pd.concat([loans_df, new_loan], ignore_index=True).fillna(0)
+                        updated_df = pd.concat([loans_df, pd.DataFrame([new_loan])], ignore_index=True)
 
-                        final_save = updated_df.copy()
-                        final_save.columns = [c.replace("_", " ") for c in final_save.columns]
-                        
-                        if save_data_saas("Loans", final_save):
-                            st.success(f"✅ Loan #{new_id} issued!")
+                        if save_data_saas("loans", updated_df):
+                            st.success(f"✅ Loan #{new_id} issued successfully!")
+                            st.cache_data.clear()
                             st.rerun()
+                    else:
+                        st.error("Please enter a principal amount greater than 0.")
 
     # ==============================
-    # TAB: MANAGE (UNCHANGED LOGIC + SAFETY ONLY)
+    # TAB: MANAGE
     # ==============================
     with tab_manage:
         if loans_df.empty:
-            st.info("No loans available to manage.")
+            st.info("No loans available to edit.")
         else:
-            loans_df['display_name'] = loans_df.apply(
-                lambda x: f"ID: {str(x['Loan_ID']).replace('.0', '')} - {x['Borrower']}", axis=1
-            )
-
-            selected_display = st.selectbox(
-                "Select Loan", loans_df['display_name'].unique()
-            )
-
-            clean_id = selected_display.split(" - ")[0].replace("ID: ", "").strip()
-
-            loan_to_edit = loans_df[
-                loans_df["Loan_ID"].astype(str).str.replace(".0", "", regex=False) == clean_id
-            ].iloc[0]
+            # Create a selection list
+            loans_df['selector'] = loans_df.apply(lambda x: f"#{x['loan_id']} - {x['borrower']}", axis=1)
+            selected_loan_txt = st.selectbox("Select Loan to Edit", loans_df['selector'].unique())
+            
+            loan_id_to_find = selected_loan_txt.split(" - ")[0].replace("#", "")
+            
+            # Find the record
+            mask = loans_df["loan_id"].astype(str) == str(loan_id_to_find)
+            loan_data = loans_df[mask].iloc[0]
 
             with st.form("edit_loan_form"):
-                new_principal = st.number_input("Principal", value=float(loan_to_edit['Principal']))
+                st.write(f"Editing Loan for **{loan_data['borrower']}**")
+                new_p = st.number_input("Principal", value=float(loan_data['principal']))
+                new_stat = st.selectbox("Status", ["Active", "Closed", "Defaulted"], 
+                                      index=["Active", "Closed", "Defaulted"].index(loan_data['status']) if loan_data['status'] in ["Active", "Closed", "Defaulted"] else 0)
                 
-                if st.form_submit_button("💾 Save Changes"):
-                    idx = loans_df[
-                        loans_df["Loan_ID"].astype(str).str.replace(".0", "", regex=False) == clean_id
-                    ].index[0]
-
-                    loans_df.at[idx, 'Principal'] = new_principal
-
-                    save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
-                    save_df.columns = [c.replace("_", " ") for c in save_df.columns]
-
-                    if save_data_saas("Loans", save_df):
-                        st.success("✅ Updated!")
+                if st.form_submit_button("💾 Update Loan"):
+                    loans_df.loc[mask, 'principal'] = new_p
+                    loans_df.loc[mask, 'status'] = new_stat
+                    
+                    # Clean up selector column before saving
+                    save_df = loans_df.drop(columns=['selector'], errors='ignore')
+                    
+                    if save_data_saas("loans", save_df):
+                        st.success("Loan updated successfully.")
+                        st.cache_data.clear()
                         st.rerun()
 
 # ==============================
 # 14. PAYMENTS & COLLECTIONS PAGE (ENTERPRISE SaaS - UPGRADED)
 # ==============================
-
 import random
+from datetime import datetime
 
 # -------------------------------
 # SAFE USER SERIALIZER
 # -------------------------------
 def get_user_identity():
+    """Returns a string representation of the current logged-in user"""
     user = st.session_state.get("user", None)
-
     if user is None:
-        return "system"
-
+        return "system_user"
+    # Logic to handle different Supabase user object structures
     if hasattr(user, "id"):
         return str(user.id)
-
-    if hasattr(user, "email"):
-        return str(user.email)
-
-    return str(user)
-
+    if isinstance(user, dict) and "id" in user:
+        return str(user["id"])
+    return "authorized_staff"
 
 # -------------------------------
 # STATUS NORMALIZER
@@ -921,277 +971,201 @@ def get_user_identity():
 VALID_STATUSES = {"ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
 
 def normalize_status(status):
+    """Ensures loan statuses adhere to enterprise naming conventions"""
     if pd.isna(status):
         return "PENDING"
     cleaned = str(status).strip().upper().replace(" ", "_")
     return cleaned if cleaned in VALID_STATUSES else "PENDING"
 
-
 # -------------------------------
 # JSON SAFETY (CRITICAL FIX)
 # -------------------------------
 def make_json_safe(df):
+    """Standardizes types to ensure Supabase/JSON serialization doesn't crash"""
     if df is None or df.empty:
         return df
-    return df.applymap(
-        lambda x: str(x)
-        if not isinstance(x, (str, int, float, bool, type(None)))
-        else x
-    )
-
+    # applymap replaced with map in newer pandas, adding compatibility check
+    func = lambda x: str(x) if not isinstance(x, (str, int, float, bool, type(None))) else x
+    return df.map(func) if hasattr(df, "map") else df.applymap(func)
 
 # -------------------------------
 # SAFE SAVE WRAPPER (ENTERPRISE)
 # -------------------------------
 def save_data_safe(table, df):
+    """Handles the upsert logic with error boundary protection"""
     try:
+        tenant_id = st.session_state.get('tenant_id')
         df = make_json_safe(df)
+        # Force tenant_id on every row
+        df["tenant_id"] = str(tenant_id)
+        
         data = df.to_dict(orient="records")
         supabase.table(table).upsert(data).execute()
         return True
     except Exception as e:
-        st.error(f"Error saving to {table}: {e}")
+        st.error(f"📡 Database Sync Error ({table}): {e}")
         return False
-
 
 # ==============================
 # MAIN PAYMENTS MODULE
 # ==============================
 def show_payments():
-    """
-    Manages cash inflows. Includes payment posting,
-    automatic loan status updates, and history logs.
-    SaaS multi-tenant safe.
-    """
-
-    st.markdown("<h2 style='color: #2B3F87;'>💵 Payments Management</h2>", unsafe_allow_html=True)
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"<h2 style='color: {brand_color};'>💵 Payments Management</h2>", unsafe_allow_html=True)
 
     # -------------------------------
-    # FETCH TENANT DATA (SAFE)
+    # FETCH TENANT DATA (ISOLATED)
     # -------------------------------
-    loans_df = get_cached_data("loans")
-    payments_df = get_cached_data("payments")
-    borrowers_df = get_cached_data("borrowers")
+    loans_df = get_data("loans") # Using the safe get_data from Part 13
+    payments_df = get_data("payments")
+    borrowers_df = get_data("borrowers")
 
-    # -------------------------------
-    # SAFETY CHECKS
-    # -------------------------------
     if loans_df is None or loans_df.empty:
-        st.info("ℹ️ No loans found in the system.")
+        st.info("ℹ️ No active loans found to receive payments.")
         return
 
-    loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-    if payments_df is not None and not payments_df.empty:
-        payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
-
+    # Map borrower names for the UI dropdown
     if borrowers_df is not None and not borrowers_df.empty:
-        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
         bor_name_col = next((c for c in borrowers_df.columns if 'name' in c), "name")
         bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df[bor_name_col]))
     else:
         bor_map = {}
 
     tab_new, tab_history, tab_manage = st.tabs([
-        "➕ Record Payment", "📜 History & Trends", "⚙️ Edit/Delete"
+        "➕ Record Payment", "📜 Payment History", "⚙️ Manage Records"
     ])
 
     # ==============================
     # TAB 1: RECORD PAYMENT
     # ==============================
     with tab_new:
-
-        active_loans = loans_df.copy()
-
-        if "status" in active_loans.columns:
-            active_loans = active_loans[
-                active_loans["status"].astype(str).str.lower() != "closed"
-            ]
+        # Filter for non-closed loans
+        active_loans = loans_df[loans_df["status"].astype(str).str.upper() != "CLOSED"].copy()
 
         if active_loans.empty:
-            st.success("🎉 All loans are currently cleared!")
-            return
+            st.success("🎉 Portfolio Clean: No outstanding payments due!")
+        else:
+            # Prepare display labels for the dropdown
+            active_loans["borrower_name"] = active_loans["borrower"].fillna("Unknown")
+            
+            loan_options = active_loans.apply(
+                lambda x: f"ID: {x['loan_id']} | {x['borrower_name']} (Bal: {x.get('balance', 0):,.0f})",
+                axis=1
+            ).tolist()
 
-        active_loans["borrower_display"] = active_loans.get("borrower_id", pd.Series()).astype(str).map(bor_map).fillna("Unknown")
+            selected_option = st.selectbox("Select Loan to Credit", loan_options)
 
-        loan_options = active_loans.apply(
-            lambda x: f"ID: {x.get('id', '0')} | {x.get('loan_id_label', 'LN')} - {x.get('borrower_display', 'Unknown')}",
-            axis=1
-        ).tolist()
+            # Resolve Selected Loan
+            try:
+                sel_id = selected_option.split(" | ")[0].replace("ID: ", "").strip()
+                loan = active_loans[active_loans["loan_id"].astype(str) == str(sel_id)].iloc[0]
+            except:
+                st.error("Error resolving selected loan.")
+                st.stop()
 
-        selected_option = st.selectbox("Select Loan to Credit", loan_options, key="pay_sel")
+            # Calculations
+            outstanding = float(loan.get("balance", 0))
+            paid_so_far = float(loan.get("amount_paid", 0))
+            total_rep = float(loan.get("total_repayable", 0))
+            t_id = st.session_state.get('tenant_id')
 
-        # -------------------------------
-        # SAFE LOAN RESOLUTION
-        # -------------------------------
-        try:
-            raw_id_str = selected_option.split(" | ")[0].replace("ID: ", "").strip()
+            with st.form("payment_posting_form", clear_on_submit=True):
+                col_a, col_b, col_c = st.columns(3)
+                pay_amount = col_a.number_input("Amount (UGX)", min_value=0, step=5000)
+                pay_method = col_b.selectbox("Method", ["Mobile Money", "Cash", "Bank Transfer"])
+                pay_date = col_c.date_input("Date Received", value=datetime.now())
 
-            loan_df_filtered = active_loans[
-                active_loans["id"].astype(str) == raw_id_str
-            ]
+                if st.form_submit_button("✅ Confirm Payment", use_container_width=True):
+                    if pay_amount <= 0:
+                        st.warning("Please enter an amount greater than 0.")
+                    else:
+                        # Prevent overpayment from breaking the ledger
+                        actual_pay = pay_amount
+                        if actual_pay > outstanding:
+                            st.info(f"Note: Amount adjusted from {pay_amount:,.0f} to {outstanding:,.0f} (Full Clearance)")
+                            actual_pay = outstanding
 
-            if loan_df_filtered.empty:
-                st.error("Loan not found.")
-                return
+                        receipt_no = f"R-{datetime.now().strftime('%y%m%d')}-{random.randint(1000,9999)}"
 
-            loan = loan_df_filtered.iloc[0]
+                        # 1. Create Payment Entry
+                        new_payment = pd.DataFrame([{
+                            "loan_id": str(loan["loan_id"]),
+                            "borrower": str(loan["borrower_name"]),
+                            "amount": float(actual_pay),
+                            "date": pay_date.strftime("%Y-%m-%d"),
+                            "method": str(pay_method),
+                            "recorded_by": get_user_identity(),
+                            "receipt_no": receipt_no,
+                            "tenant_id": str(t_id)
+                        }])
 
-        except Exception as e:
-            st.error(f"❌ Error identifying Loan: {e}")
-            st.stop()
+                        # 2. Update Loan Balance/Status
+                        new_total_paid = paid_so_far + actual_pay
+                        # Buffer of 10 UGX for rounding precision
+                        new_status = "CLOSED" if new_total_paid >= (total_rep - 10) else "ACTIVE"
 
-        # -------------------------------
-        # CALCULATIONS
-        # -------------------------------
-        total_rep = float(loan.get("total_repayable", 0))
-        paid_so_far = float(loan.get("amount_paid", 0))
-        outstanding = total_rep - paid_so_far
+                        loan_update = pd.DataFrame([{
+                            "loan_id": loan["loan_id"],
+                            "amount_paid": float(new_total_paid),
+                            "status": new_status,
+                            "tenant_id": str(t_id),
+                            "last_payment_date": pay_date.strftime("%Y-%m-%d")
+                        }])
 
-        borrower_name = loan.get('borrower_display', 'Unknown')
-
-        # -------------------------------
-        # TENANT SAFETY
-        # -------------------------------
-        t_id = st.session_state.get('tenant_id')
-        if not t_id:
-            st.error("Tenant session missing.")
-            return
-
-        # -------------------------------
-        # UI FORM
-        # -------------------------------
-        with st.form("payment_form", clear_on_submit=True):
-            col_a, col_b, col_c = st.columns(3)
-
-            pay_amount = col_a.number_input("Amount Received (UGX)", min_value=0, step=10000)
-            pay_method = col_b.selectbox("Method", ["Mobile Money", "Cash", "Bank Transfer", "Cheque"])
-            pay_date = col_c.date_input("Payment Date", value=datetime.now())
-
-            if st.form_submit_button("✅ Post Payment", use_container_width=True):
-
-                if pay_amount <= 0:
-                    st.warning("Enter a valid amount.")
-                    return
-
-                try:
-                    if pay_amount > outstanding:
-                        st.warning("Overpayment adjusted.")
-                        pay_amount = outstanding
-
-                    receipt_no = f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(100,999)}"
-
-                    # PAYMENT RECORD
-                    new_payment = pd.DataFrame([{
-                        "loan_id": str(loan["id"]),
-                        "borrower": str(borrower_name),
-                        "amount": float(pay_amount),
-                        "date": pay_date.strftime("%Y-%m-%d"),
-                        "method": str(pay_method),
-                        "recorded_by": get_user_identity(),
-                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "receipt_no": receipt_no,
-                        "tenant_id": str(t_id)
-                    }])
-
-                    # LOAN UPDATE
-                    new_total_paid = paid_so_far + float(pay_amount)
-
-                    new_status = "CLOSED" if new_total_paid >= (total_rep - 10) else normalize_status(loan.get("status", "ACTIVE"))
-
-                    loan_update = pd.DataFrame([{
-                        "id": loan["id"],
-                        "amount_paid": float(new_total_paid),
-                        "status": normalize_status(new_status),
-                        "tenant_id": str(t_id),
-                        "last_payment_date": pay_date.strftime("%Y-%m-%d")
-                    }])
-
-                    if save_data_safe("payments", new_payment) and save_data_safe("loans", loan_update):
-                        st.success(f"Payment posted for {borrower_name}")
-
-                        if new_status == "CLOSED":
-                            st.balloons()
-
-                        st.cache_data.clear()
-                        st.rerun()
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                        # Atomic-style update
+                        if save_data_safe("payments", new_payment) and save_data_safe("loans", loan_update):
+                            st.success(f"Payment of {actual_pay:,.0f} posted for {loan['borrower_name']}")
+                            if new_status == "CLOSED":
+                                st.balloons()
+                            
+                            st.cache_data.clear()
+                            st.rerun()
 
     # ==============================
     # TAB 2: HISTORY
     # ==============================
     with tab_history:
         if payments_df is not None and not payments_df.empty:
-
-            df_display = payments_df.copy()
-
-            def get_level(amt):
-                if amt >= 5000000:
-                    return "🟢 Large"
-                if amt >= 1000000:
-                    return "🔵 Medium"
-                return "⚪ Small"
-
-            df_display["level"] = df_display["amount"].apply(get_level)
-
-            df_display["amount"] = df_display["amount"].apply(lambda x: f"{x:,.0f}")
-
+            df_display = payments_df.copy().sort_values("date", ascending=False)
+            
+            # Formatting for display
+            df_display["amount_fmt"] = df_display["amount"].apply(lambda x: f"UGX {x:,.0f}")
+            
             st.dataframe(
-                df_display.sort_values("date", ascending=False),
+                df_display[["date", "borrower", "amount_fmt", "method", "receipt_no", "recorded_by"]],
                 use_container_width=True,
                 hide_index=True
             )
         else:
-            st.info("No payment history found.")
+            st.info("No transaction history found for this tenant.")
 
     # ==============================
-    # TAB 3: EDIT / DELETE
+    # TAB 3: MANAGE (ADMIN)
     # ==============================
     with tab_manage:
         if payments_df is not None and not payments_df.empty:
+            p_sel_id = st.selectbox("Select Receipt to Action", payments_df["receipt_no"].unique())
+            p_row = payments_df[payments_df["receipt_no"] == p_sel_id].iloc[0]
 
-            p_sel_id = st.selectbox("Select Receipt ID", payments_df["id"].unique())
-            p_row = payments_df[payments_df["id"] == p_sel_id].iloc[0]
-
-            with st.form("edit_payment"):
-                new_amt = st.number_input("Amount", value=float(p_row["amount"]))
-                new_date = st.date_input("Date", value=pd.to_datetime(p_row["date"]))
-
-                if st.form_submit_button("Update"):
-                    update_df = pd.DataFrame([{
-                        "id": p_sel_id,
-                        "amount": new_amt,
-                        "date": new_date.strftime("%Y-%m-%d"),
-                        "tenant_id": st.session_state.get("tenant_id")
-                    }])
-
-                    if save_data_safe("payments", update_df):
-                        st.success("Updated successfully")
-                        st.cache_data.clear()
-                        st.rerun()
-
-            st.markdown("---")
-
-            if st.button("🗑️ Delete Receipt", type="primary"):
+            st.warning("⚠️ Warning: Deleting or editing payments requires a manual balance reconciliation of the associated loan.")
+            
+            if st.button("🗑️ Void Payment Receipt", type="primary", use_container_width=True):
                 try:
-                    supabase.table("payments").delete().eq("id", p_sel_id).execute()
-                    st.warning("Deleted")
+                    # Tenant-safe deletion check
+                    supabase.table("payments").delete().eq("receipt_no", p_sel_id).eq("tenant_id", t_id).execute()
+                    st.success(f"Receipt {p_sel_id} voided.")
                     st.cache_data.clear()
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Delete failed: {e}")
+                    st.error(f"Deletion failed: {e}")
 
 # ==============================
 # 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
-
 import mimetypes
 from datetime import datetime
 import pandas as pd
 import streamlit as st
-
 
 def show_collateral():
     brand_color = st.session_state.get("theme_color", "#2B3F87")
@@ -1204,50 +1178,24 @@ def show_collateral():
         st.error("🔐 Session expired. Please log in.")
         st.stop()
 
+    st.markdown(f"<h2 style='color: {brand_color};'>🛡️ Collateral & Security</h2>", unsafe_allow_html=True)
+
     # ==============================
     # FETCH DATA (SAFE)
     # ==============================
-    collateral_df = get_cached_data("collateral")
-    loans_df = get_cached_data("loans")
-
-    # ==============================
-    # SAAS FILTER (HARDENED - NO BREAKS)
-    # ==============================
-    if collateral_df is None:
-        collateral_df = pd.DataFrame()
-
-    if loans_df is None:
-        loans_df = pd.DataFrame()
-
-    if not collateral_df.empty:
-        if "tenant_id" in collateral_df.columns:
-            collateral_df = collateral_df[
-                collateral_df["tenant_id"].astype(str) == str(current_tenant)
-            ]
-        else:
-            collateral_df["tenant_id"] = current_tenant
-
-    if not loans_df.empty:
-        if "tenant_id" in loans_df.columns:
-            loans_df = loans_df[
-                loans_df["tenant_id"].astype(str) == str(current_tenant)
-            ]
-        else:
-            loans_df["tenant_id"] = current_tenant
+    # Using the safe adapters from previous parts
+    collateral_df = get_data("collateral") 
+    loans_df = get_data("loans")
 
     # ==============================
     # NORMALIZE LOANS COLUMNS (SAFE)
     # ==============================
-    l_id_col, l_bor_col, l_stat_col = "id", "borrower", "status"
-
-    if not loans_df.empty:
-        loans_df.columns = (
-            loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        )
-
-        l_id_col = next((c for c in loans_df.columns if "id" in c), "id")
-        l_bor_col = next((c for c in loans_df.columns if "borrower" in c or "name" in c), "borrower")
-        l_stat_col = next((c for c in loans_df.columns if "status" in c), "status")
+    if loans_df is not None and not loans_df.empty:
+        # Filter for loans that actually need collateral (Active, Overdue, Pending)
+        active_statuses = ["active", "overdue", "pending"]
+        available_loans = loans_df[loans_df["status"].str.lower().isin(active_statuses)].copy()
+    else:
+        available_loans = pd.DataFrame()
 
     # --- TABS ---
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
@@ -1256,184 +1204,113 @@ def show_collateral():
     # TAB 1: REGISTER COLLATERAL
     # ==============================
     with tab_reg:
-
-        if loans_df.empty:
-            st.warning("⚠️ No loans found.")
+        if available_loans.empty:
+            st.warning("⚠️ No active loans found to attach collateral to.")
         else:
-            active_statuses = ["Active", "Overdue", "Rolled/Overdue", "Pending"]
+            with st.form("collateral_reg_form", clear_on_submit=True):
+                st.write("### Link Asset to Loan")
+                c1, c2 = st.columns(2)
 
-            if l_stat_col not in loans_df.columns:
-                st.error("Loan status column missing.")
-                return
+                # Create dropdown labels: "Borrower Name (Loan ID)"
+                loan_labels = available_loans.apply(
+                    lambda x: f"{x['borrower']} (ID: {x['loan_id']})", axis=1
+                ).tolist()
+                
+                selected_label = c1.selectbox("Select Loan/Borrower", options=loan_labels)
+                asset_type = c2.selectbox(
+                    "Asset Type",
+                    ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
+                )
 
-            available_loans = loans_df[
-                loans_df[l_stat_col].astype(str).str.title().fillna("").isin(active_statuses)
-            ].copy()
+                desc = st.text_input("Detailed Asset Description (e.g. Plate No, Plot No)")
+                est_value = st.number_input("Estimated Market Value (UGX)", min_value=0, step=100000)
+                
+                st.markdown("---")
+                # Photo upload (Note: In a real app, this would stream to Supabase Storage)
+                uploaded_photo = st.file_uploader("Upload Asset Photo (Verification)", type=["jpg", "png", "jpeg"])
 
-            if available_loans.empty:
-                st.info("✅ No active loans.")
-            else:
-                with st.form("collateral_form", clear_on_submit=True):
-
-                    c1, c2 = st.columns(2)
-
-                    loan_options = []
-                    loan_id_lookup = {}
-
-                    for _, row in available_loans.iterrows():
-                        loan_id_val = row.get(l_id_col, "UNKNOWN")
-                        borrower_val = str(row.get(l_bor_col, "UNKNOWN"))
-
-                        display_label = f"{borrower_val.upper()} ({str(loan_id_val)[:8]})"
-
-                        loan_options.append(display_label)
-                        loan_id_lookup[display_label] = loan_id_val
-
-                    selected_label = c1.selectbox("Select Loan", options=loan_options)
-
-                    asset_type = c2.selectbox(
-                        "Asset Type",
-                        ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"]
-                    )
-
-                    desc = st.text_input("Asset Description")
-                    est_value = st.number_input("Estimated Value", min_value=0, step=100000)
-                    uploaded_photo = st.file_uploader(
-                        "Upload Asset Photo",
-                        type=["jpg", "png", "jpeg"]
-                    )
-
-                    submit = st.form_submit_button("💾 Save & Secure Asset")
-
-                if submit:
-
+                if st.form_submit_button("💾 Save & Secure Asset", use_container_width=True):
                     if not desc or est_value <= 0:
-                        st.warning("Please fill all required fields.")
+                        st.error("Please provide a description and valid value.")
                     else:
-                        try:
-                            actual_loan_id = loan_id_lookup.get(selected_label)
+                        # Extract the actual loan_id from the label
+                        actual_loan_id = selected_label.split("(ID: ")[1].replace(")", "")
+                        borrower_name = selected_label.split(" (ID:")[0]
 
-                            if actual_loan_id is None:
-                                st.error("Invalid loan selection.")
-                            else:
-                                clean_borrower_name = selected_label.split(" (")[0]
+                        new_asset = pd.DataFrame([{
+                            "loan_id": actual_loan_id,
+                            "tenant_id": str(current_tenant),
+                            "borrower": borrower_name,
+                            "type": asset_type,
+                            "description": desc,
+                            "value": float(est_value),
+                            "status": "In Custody",
+                            "date_added": datetime.now().strftime("%Y-%m-%d")
+                        }])
 
-                                new_asset = pd.DataFrame([{
-                                    "loan_id": actual_loan_id,
-                                    "tenant_id": current_tenant,
-                                    "borrower": clean_borrower_name,
-                                    "type": asset_type,
-                                    "description": desc,
-                                    "value": float(est_value),
-                                    "status": "Held",
-                                    "date_added": datetime.now().strftime("%Y-%m-%d")
-                                }])
-
-                                if save_data("collateral", new_asset):
-                                    st.success("✅ Asset saved successfully!")
-                                    st.cache_data.clear()
-                                    st.rerun()
-
-                        except Exception as e:
-                            st.error(f"❌ Error saving collateral: {e}")
+                        if save_data_saas("collateral", new_asset):
+                            st.success(f"✅ Asset secured for {borrower_name}!")
+                            st.cache_data.clear()
+                            st.rerun()
 
     # ==============================
-    # TAB 2: INVENTORY
+    # TAB 2: INVENTORY & STATUS
     # ==============================
     with tab_view:
-
-        if collateral_df.empty:
-            st.info("💡 No assets yet.")
+        if collateral_df is None or collateral_df.empty:
+            st.info("💡 No assets currently in the registry.")
         else:
-            collateral_df["value"] = pd.to_numeric(
-                collateral_df.get("value", 0),
-                errors='coerce'
-            ).fillna(0)
-
-            c_bor_col = next((c for c in collateral_df.columns if 'borrower' in c), "borrower")
-            c_stat_col = next((c for c in collateral_df.columns if 'status' in c), "status")
-            c_id_col = next((c for c in collateral_df.columns if 'id' in c), "id")
-
-            total_val = collateral_df[
-                ~collateral_df[c_stat_col].astype(str).str.lower().isin(["released"])
-            ]["value"].sum()
-
-            in_custody = collateral_df[
-                collateral_df[c_stat_col].astype(str).str.lower().isin(["in custody", "held"])
-            ].shape[0]
-
+            # Metrics
+            total_value = collateral_df["value"].sum()
+            held_count = len(collateral_df[collateral_df["status"] == "In Custody"])
+            
             m1, m2 = st.columns(2)
-            m1.metric("Total Value", f"{total_val:,.0f}")
-            m2.metric("Active Assets", in_custody)
+            m1.metric("Total Asset Value", f"UGX {total_value:,.0f}")
+            m2.metric("Items in Custody", held_count)
 
-            rows_html = ""
-            for i, r in collateral_df.reset_index().iterrows():
-                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                display_id = str(r.get(c_id_col, ""))[:8]
+            st.markdown("### Asset Ledger")
+            
+            # Clean display for the table
+            display_df = collateral_df.copy()
+            display_df["value"] = display_df["value"].apply(lambda x: f"{x:,.0f}")
+            
+            st.dataframe(
+                display_df[["date_added", "borrower", "type", "description", "value", "status"]],
+                use_container_width=True,
+                hide_index=True
+            )
 
-                rows_html += f"""
-                <tr style="background:{bg};">
-                    <td>{display_id}</td>
-                    <td>{r.get(c_bor_col, '')}</td>
-                    <td>{r.get('type','')}</td>
-                    <td>{r.get('description','')}</td>
-                    <td>{float(r.get('value',0)):,.0f}</td>
-                    <td>{r.get(c_stat_col,'')}</td>
-                    <td>{r.get('date_added','')}</td>
-                </tr>
-                """
+            # --- MANAGE SECTION ---
+            with st.expander("⚙️ Release or Dispose Assets"):
+                # Filter for assets that haven't been released yet
+                manageable = collateral_df[collateral_df["status"] != "Released"].copy()
+                
+                if manageable.empty:
+                    st.write("All assets are currently released.")
+                else:
+                    asset_to_manage = st.selectbox(
+                        "Select Asset to Update", 
+                        manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1)
+                    )
+                    
+                    # Logic to find the specific ID
+                    selected_idx = manageable.index[manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1) == asset_to_manage][0]
+                    asset_id = manageable.at[selected_idx, "id"] if "id" in manageable.columns else None
 
-            st.markdown(f"<table>{rows_html}</table>", unsafe_allow_html=True)
-
-            # ==============================
-            # MANAGE COLLATERAL (SAFE FIXED)
-            # ==============================
-            with st.expander("⚙️ Manage Collateral Records"):
-
-                manage_list = collateral_df.apply(
-                    lambda x: f"{str(x.get(c_id_col,''))[:8]} | {x.get(c_bor_col,'')}",
-                    axis=1
-                ).tolist()
-
-                selected_col = st.selectbox("Select Asset", manage_list)
-
-                selected_idx = manage_list.index(selected_col)
-                c_row = collateral_df.iloc[selected_idx]
-
-                ce1, ce2 = st.columns(2)
-
-                upd_desc = ce1.text_input(
-                    "Description",
-                    value=str(c_row.get("description", ""))
-                )
-
-                upd_val = ce1.number_input(
-                    "Value",
-                    value=float(c_row.get("value", 0))
-                )
-
-                status_opts = ["In Custody", "Released", "Disposed", "Held"]
-                current_stat = str(c_row.get(c_stat_col, "Held")).title()
-
-                if current_stat not in status_opts:
-                    status_opts.append(current_stat)
-
-                upd_stat = ce2.selectbox("Status", status_opts)
-
-                if st.button("💾 Save Changes"):
-
-                    update_df = pd.DataFrame([{
-                        "id": c_row.get(c_id_col),
-                        "description": upd_desc,
-                        "value": upd_val,
-                        "status": upd_stat,
-                        "tenant_id": current_tenant
-                    }])
-
-                    if save_data("collateral", update_df):
-                        st.success("✅ Updated successfully!")
-                        st.cache_data.clear()
-                        st.rerun()
+                    col_stat, col_btn = st.columns([2,1])
+                    new_stat = col_stat.selectbox("Set New Status", ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"])
+                    
+                    if col_btn.button("Update Status", use_container_width=True):
+                        update_row = pd.DataFrame([{
+                            "id": asset_id, # Requires the DB generated ID
+                            "status": new_stat,
+                            "tenant_id": str(current_tenant)
+                        }])
+                        
+                        if save_data_saas("collateral", update_row):
+                            st.success("Asset status updated!")
+                            st.cache_data.clear()
+                            st.rerun()
             
 
 # ==============================
@@ -1456,7 +1333,8 @@ def show_calendar():
     # 1. FETCH DATA (SAFETY WRAPPER ADDED)
     # ==============================
     try:
-        loans_df = get_cached_data("Loans")  # keeps your logic
+        # Utilizing the get_data helper which already has tenant isolation
+        loans_df = get_data("loans") 
     except Exception:
         loans_df = pd.DataFrame()
 
@@ -1465,7 +1343,7 @@ def show_calendar():
     # ==============================
     if loans_df is not None and not loans_df.empty:
         if "tenant_id" in loans_df.columns:
-            loans_df = loans_df[loans_df["tenant_id"] == tenant_id]
+            loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
         else:
             loans_df["tenant_id"] = tenant_id
 
@@ -1512,6 +1390,7 @@ def show_calendar():
 
     today = pd.Timestamp.today().normalize()
 
+    # Filter out closed loans for the calendar view
     active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "closed"].copy()
 
     # ==============================
@@ -1521,6 +1400,7 @@ def show_calendar():
     for _, r in active_loans.iterrows():
         if pd.notna(r[l_end_col]):
             try:
+                # Compare only dates to avoid timezone/time mismatch
                 is_overdue = r[l_end_col].date() < today.date()
             except Exception:
                 is_overdue = False
@@ -1567,19 +1447,19 @@ def show_calendar():
     m1, m2, m3 = st.columns(3)
 
     m1.markdown(
-        f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;">
+        f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
         <p style='margin:0;font-size:0.8em;color:grey;'>DUE TODAY</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{len(due_today_df)} Accounts</p></div>""",
         unsafe_allow_html=True
     )
 
     m2.markdown(
-        f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;">
-        <p style='margin:0;font-size:0.8em;color:grey;'>UPCOMING</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{len(upcoming_df)} Accounts</p></div>""",
+        f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
+        <p style='margin:0;font-size:0.8em;color:grey;'>UPCOMING (7D)</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{len(upcoming_df)} Accounts</p></div>""",
         unsafe_allow_html=True
     )
 
     m3.markdown(
-        f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;">
+        f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
         <p style='margin:0;font-size:0.8em;color:grey;'>OVERDUE</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{overdue_count}</p></div>""",
         unsafe_allow_html=True
     )
@@ -1590,7 +1470,7 @@ def show_calendar():
     st.markdown("### 🏢 Master Loan Ledger")
 
     if active_loans.empty:
-        st.info("ℹ️ No loan records found.")
+        st.info("ℹ️ No active loan records found.")
     else:
         df = active_loans.copy()
 
@@ -1607,7 +1487,7 @@ def show_calendar():
         due_col = find_col(["due", "end"])
 
         if not id_col or not borrower_col:
-            st.error("❌ Required columns missing")
+            st.error("❌ Required identifying columns missing from the loans table.")
             st.stop()
 
         df[id_col] = df[id_col].astype(str)
@@ -1635,15 +1515,15 @@ def show_calendar():
         if "Due Date" in view_df.columns:
             view_df["Due Date"] = pd.to_datetime(view_df["Due Date"], errors='coerce').dt.strftime("%Y-%m-%d")
 
-        st.dataframe(view_df, use_container_width=True)
+        st.dataframe(view_df, use_container_width=True, hide_index=True)
 
+        # Final check for warnings
         if due_col:
-            overdue_count_check = (df[due_col] < pd.Timestamp.now()).sum()
-
+            overdue_count_check = (df[due_col].dt.date < today.date()).sum()
             if overdue_count_check > 0:
-                st.warning(f"⚠️ {overdue_count_check} loan(s) overdue")
+                st.warning(f"⚠️ Action Required: {overdue_count_check} loan(s) are currently past their due date.")
             else:
-                st.success("✅ No overdue loans")                                                                                                                      
+                st.success("✅ All collections are currently on track.")                                                                                                                      
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
@@ -1671,6 +1551,7 @@ def show_expenses():
     # 1. FETCH DATA (SAFE WRAPPER ADDED)
     # ==============================
     try:
+        # Pulling data using your existing cache logic
         df = get_cached_data("expenses")
     except Exception:
         df = pd.DataFrame()
@@ -1680,7 +1561,7 @@ def show_expenses():
     # ==============================
     if df is not None and not df.empty:
         if "tenant_id" in df.columns:
-            df = df[df["tenant_id"] == current_tenant]
+            df = df[df["tenant_id"].astype(str) == str(current_tenant)]
         else:
             df["tenant_id"] = current_tenant
 
@@ -1743,6 +1624,7 @@ def show_expenses():
 
                         if save_data("expenses", updated_df):
                             st.success("✅ Expense recorded!")
+                            st.cache_data.clear() # Ensure analytics update
                             st.rerun()
                     except Exception as e:
                         st.error(f"🚨 Save failed: {e}")
@@ -1761,7 +1643,9 @@ def show_expenses():
                 st.markdown(f"<h3>Total Spent: {total_spent:,.0f} UGX</h3>", unsafe_allow_html=True)
 
                 cat_summary = df.groupby("category")["amount"].sum().reset_index()
-                fig_exp = px.pie(cat_summary, names="category", values="amount", title="Expenses by Category")
+                fig_exp = px.pie(cat_summary, names="category", values="amount", 
+                                 title="Expenses by Category",
+                                 color_discrete_sequence=px.colors.qualitative.Prism)
                 st.plotly_chart(fig_exp, use_container_width=True)
 
             except Exception:
@@ -1784,6 +1668,7 @@ def show_expenses():
                 df["id"] = df["id"].astype(str)
                 df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
 
+                # Create a selection label for the dropdown
                 df["label"] = df.apply(
                     lambda r: f"{r['category']} - {r['amount']:,.0f} UGX | {str(r['payment_date'])[:10]}",
                     axis=1
@@ -1805,194 +1690,29 @@ def show_expenses():
                             final_df = df.drop(columns=['label'])
                             if save_data("expenses", final_df):
                                 st.success("✅ Updated!")
+                                st.cache_data.clear()
                                 st.rerun()
 
                     st.divider()
 
-                    if st.button("🗑️ Delete Selected Expense", type="secondary"):
+                    if st.button("🗑️ Delete Selected Expense", type="secondary", use_container_width=True):
                         df = df[df["id"] != exp_id]
                         final_df = df.drop(columns=['label'])
                         if save_data("expenses", final_df):
                             st.success("✅ Deleted!")
+                            st.cache_data.clear()
                             st.rerun()
 
             except Exception as e:
                 st.error(f"🚨 Manage error: {e}")
+
 # ==============================
-# 13. LOANS MANAGEMENT PAGE (Luxe Edition + ENTERPRISE SAAS UPGRADE)
+# 19. PAYROLL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
 
-def show_loans():
-    """
-    Core engine for issuing and managing loan agreements.
-    Features Midnight Blue branding, Start Date tracking, and formatted currency.
-    (Upgraded for enterprise SaaS stability)
-    """
-    st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
-
-    # ==============================
-    # 🔐 SAAS CONTEXT (HARDENED)
-    # ==============================
-    current_tenant = st.session_state.get("tenant_id")
-
-    # ==============================
-    # 1. LOAD & NORMALIZE DATA (SAFE WRAPPER)
-    # ==============================
-    try:
-        if "loans" in st.session_state and not st.session_state.loans.empty:
-            loans_df = st.session_state.loans.copy()
-        else:
-            loans_df = get_cached_data("Loans")
-
-            if loans_df is not None:
-                st.session_state.loans = loans_df.copy()
-    except Exception:
-        loans_df = pd.DataFrame()
-
-    try:
-        borrowers_df = get_cached_data("Borrowers")
-    except Exception:
-        borrowers_df = pd.DataFrame()
-
-    # ==============================
-    # BORROWER NORMALIZATION (UNCHANGED LOGIC + SAFETY)
-    # ==============================
-    if borrowers_df is not None and not borrowers_df.empty:
-        borrowers_df.columns = [str(c).strip().replace(" ", "_") for c in borrowers_df.columns]
-        try:
-            active_borrowers = borrowers_df[
-                borrowers_df["Status"].astype(str).str.lower() == "active"
-            ]
-        except Exception:
-            active_borrowers = pd.DataFrame()
-    else:
-        active_borrowers = pd.DataFrame()
-
-    # ==============================
-    # EMPTY SAFE INIT (UNCHANGED)
-    # ==============================
-    if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=[
-            "Loan_ID","Borrower","Principal","Interest",
-            "Total_Repayable","Amount_Paid","Balance",
-            "Status","Start_Date","End_Date"
-        ])
-
-    # ==============================
-    # COLUMN NORMALIZATION (SAFE)
-    # ==============================
-    loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
-
-    # ==============================
-    # 🔐 MULTI-TENANT FIX (ENHANCED SAFETY)
-    # ==============================
-    if "tenant_id" in loans_df.columns:
-        try:
-            loans_df = loans_df[
-                loans_df["tenant_id"].astype(str) == str(current_tenant)
-            ]
-        except Exception:
-            pass
-
-    # ==============================
-    # NUMERIC CLEANING (HARDENED)
-    # ==============================
-    num_cols = ["Principal","Interest","Total_Repayable","Amount_Paid","Balance"]
-
-    for col in num_cols:
-        if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
-
-    loans_df["Balance"] = loans_df["Total_Repayable"] - loans_df["Amount_Paid"]
-
-    # ==============================
-    # AUTO CLOSE ENGINE (UNCHANGED LOGIC + SAFE GUARD)
-    # ==============================
-    if not loans_df.empty:
-        loans_df["Balance"] = loans_df["Balance"].clip(lower=0)
-
-        try:
-            closed_mask = loans_df["Balance"] <= 0
-            loans_df.loc[closed_mask, "Status"] = "Closed"
-            loans_df.loc[closed_mask, "Balance"] = 0
-        except Exception:
-            pass
-
-    # ==============================
-    # TABS (UNCHANGED)
-    # ==============================
-    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-        "📑 Portfolio View","➕ New Loan","🛠️ Manage/Edit","⚙️ Actions"
-    ])
-
-    # ==============================
-    # TAB VIEW (SAFE WRAPPER ONLY)
-    # ==============================
-    with tab_view:
-        if not loans_df.empty:
-            display_df = loans_df.copy()
-
-            display_df["Loan_ID"] = display_df["Loan_ID"].astype(str).str.replace(".0","",regex=False)
-
-            active_view = display_df.copy()
-
-            if not active_view.empty:
-                sel_id = st.selectbox(
-                    "🔍 Select Loan to Inspect",
-                    active_view["Loan_ID"].unique()
-                )
-
-                loan_history = active_view[
-                    active_view["Loan_ID"].astype(str) == str(sel_id)
-                ]
-
-                if not loan_history.empty:
-                    latest_info = loan_history.sort_values("Start_Date").iloc[-1]
-
-                    rec_val = float(latest_info.get("Amount_Paid",0))
-                    out_val = float(latest_info.get("Balance",0))
-                    stat_val = str(latest_info.get("Status","Active")).upper()
-                else:
-                    rec_val, out_val, stat_val = 0,0,"N/A"
-
-                if stat_val == "CLOSED":
-                    out_val = 0
-        else:
-            st.info("📭 No loan records available.")
-
-    # ==============================
-    # TAB MANAGE (HARDENED ONLY)
-    # ==============================
-    with tab_manage:
-        if loans_df.empty:
-            st.info("No loans available to manage.")
-        else:
-            loans_df["display_name"] = loans_df.apply(
-                lambda x: f"ID: {str(x['Loan_ID']).replace('.0','')} - {x['Borrower']}",
-                axis=1
-            )
-
-            selected_display = st.selectbox(
-                "Select Loan to Manage/Edit",
-                loans_df["display_name"].unique()
-            )
-
-            clean_id = selected_display.split(" - ")[0].replace("ID: ","").strip()
-
-            try:
-                match = loans_df[
-                    loans_df["Loan_ID"].astype(str) == str(clean_id)
-                ]
-            except Exception:
-                match = pd.DataFrame()
-
-            if not match.empty:
-                loan_to_edit = match.iloc[0]
-            else:
-                st.error("Loan not found")
-                return
-
-            st.markdown(f"#### 🛠️ Edit Loan #{clean_id}")
+import pandas as pd
+import streamlit as st
+from datetime import datetime
 
 def show_payroll():
     """
@@ -2049,11 +1769,14 @@ def show_payroll():
 
         gross = (basic + arrears) - absent_deduct
 
+        # LST Logic (Local Service Tax)
         lst = 100000 / 12 if gross > 1000000 else 0
 
+        # NSSF Logic (5% Employee, 10% Employer)
         n5, n10 = gross * 0.05, gross * 0.10
         n15 = n5 + n10
 
+        # PAYE Logic (Uganda Tax Brackets)
         paye = 0
         if gross > 410000:
             paye = 25000 + (0.30 * (gross - 410000))
@@ -2128,6 +1851,7 @@ def show_payroll():
 
                     if save_data("payroll", new_row):
                         st.success(f"✅ Payroll for {name} saved!")
+                        st.cache_data.clear()
                         st.rerun()
 
     with tab_logs:
@@ -2138,7 +1862,19 @@ def show_payroll():
                 except:
                     return "0"
 
-            rows_html = ""
+            # Rebuilding the table with your custom styling
+            header_html = """
+            <style>
+                .pay-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; }
+                .pay-table th { background: #f8f9fa; border: 1px solid #ddd; padding: 10px; }
+            </style>
+            <table class='pay-table'>
+                <tr>
+                    <th>#</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
+                    <th>PAYE</th><th>NSSF 5%</th><th>Net Pay</th><th>NSSF 10%</th><th>NSSF 15%</th>
+                </tr>
+            """
+            rows_html = header_html
 
             for i, r in df.iterrows():
                 rows_html += f"""
@@ -2164,12 +1900,13 @@ def show_payroll():
                 <td style="text-align:right;padding:12px;">{fm(total_net)}</td>
                 <td colspan="2"></td>
             </tr>
+            </table>
             """
 
             if st.button("📥 Print PDF", key="print_pay_btn"):
                 st.components.v1.html("<script>window.print();</script>", height=0)
 
-            st.components.v1.html(f"<table>{rows_html}</table>", height=600, scrolling=True)
+            st.components.v1.html(rows_html, height=600, scrolling=True)
 
             # DELETE SAFE FIX
             st.write("---")
@@ -2183,12 +1920,20 @@ def show_payroll():
                     if st.button("🗑️ Delete Record"):
                         try:
                             sid = sel_opt.split("(ID: ")[1].replace(")", "")
+                            # Use global supabase client
                             supabase.table("payroll").delete().eq("id", sid).execute()
                             st.warning("Deleted.")
+                            st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Delete failed: {e}")
 
+# ==============================
+# 20. ADVANCED ANALYTICS & REPORTS (SAAS + ENTERPRISE)
+# ==============================
+import plotly.express as px
+import pandas as pd
+import streamlit as st
 
 def show_reports():
     """
@@ -2256,6 +2001,7 @@ def show_reports():
         ).fillna(0).sum()
 
     # 💰 FINANCIAL LOGIC (PRESERVED)
+    # Total outflow includes operational expenses + petty cash spent + tax liabilities
     total_outflow = exp_amt + petty_out + nssf_total + paye_total
     net_profit = p_amt - total_outflow
 
@@ -2306,14 +2052,15 @@ def show_reports():
                 barmode="group",
                 color_discrete_map={"Income": "#10B981", "Expenses": "#FF4B4B"}
             )
-            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend_title="")
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend_title="", margin=dict(l=0, r=0, t=20, b=0))
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
             st.info("No transaction history for trend analysis.")
 
     with col_right:
-        st.write("**🛡️ Portfolio Weight (Top 5)**")
+        st.write("**🛡️ Portfolio Weight (Top 5 Borrowers)**")
 
+        # Group principal issued by borrower to check concentration risk
         top_borrowers = loans.groupby("borrower")["principal"].sum().sort_values(ascending=False).head(5).reset_index()
 
         fig_pie = px.pie(
@@ -2323,22 +2070,23 @@ def show_reports():
             hole=0.5,
             color_discrete_sequence=px.colors.sequential.GnBu_r
         )
-        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=True)
+        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=True, margin=dict(l=0, r=0, t=20, b=0))
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # ==============================
     # 6. RISK INDICATOR (PAR % FIXED SAFETY)
     # ==============================
     st.markdown("---")
-    st.subheader("🚨 Risk Assessment")
+    st.subheader("🚨 Risk Assessment (Portfolio at Risk)")
 
     loans = loans.copy()
     loans["end_date"] = pd.to_datetime(loans.get("end_date", pd.NaT), errors="coerce")
     loans["status"] = loans.get("status", "").astype(str)
 
+    # PAR calculation: Sum of principal on overdue loans / Total principal issued
     overdue_mask = (
-        loans["status"].isin(["Overdue", "Rolled/Overdue", "Pending"]) &
-        (loans["end_date"] < pd.Timestamp.today())
+        loans["status"].str.lower().isin(["overdue", "rolled/overdue", "pending"]) &
+        (loans["end_date"].dt.date < pd.Timestamp.today().date())
     )
 
     overdue_val = pd.to_numeric(loans.loc[overdue_mask, "principal"], errors="coerce").fillna(0).sum()
@@ -2348,6 +2096,7 @@ def show_reports():
 
     with r1:
         st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
+        # Progress bar colors are handled by the threshold logic in r2
         st.progress(min(float(risk_percent) / 100, 1.0))
         st.write(f"Total Overdue Principal: **{overdue_val:,.0f} UGX**")
 
@@ -2358,6 +2107,13 @@ def show_reports():
             st.warning("⚠️ Moderate Risk")
         else:
             st.error("🆘 Critical Risk Level")
+# ==============================
+# 21. MASTER LEDGER (SAAS + ENTERPRISE)
+# ==============================
+
+import pandas as pd
+import streamlit as st
+from datetime import datetime
 
 def show_ledger():
     """
@@ -2375,8 +2131,9 @@ def show_ledger():
         return
 
     # ==============================
-    # 🔐 SAAS SAFETY + NORMALIZATION LAYER (ADDED ONLY)
+    # 🔐 SAAS SAFETY + NORMALIZATION LAYER
     # ==============================
+    # Normalize column names for robust matching
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     if payments_df is not None and not payments_df.empty:
@@ -2384,12 +2141,12 @@ def show_ledger():
 
     current_tenant = st.session_state.get("tenant_id", "default_tenant")
 
-    # ensure tenant safety (non-destructive)
+    # Ensure tenant safety: only show loans belonging to this tenant
     if "tenant_id" in loans_df.columns:
         loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)]
 
     # ==============================
-    # BORROWER RESOLUTION (UNCHANGED LOGIC + SAFE EXTENSION)
+    # BORROWER RESOLUTION (UNCHANGED LOGIC)
     # ==============================
     borrowers_df = get_cached_data("borrowers")
     bor_map = {}
@@ -2400,10 +2157,11 @@ def show_ledger():
         bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df[bor_name_col]))
 
     if "borrower" not in loans_df.columns:
+        # Resolve names from IDs if the direct column is missing
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
 
     # ==============================
-    # SELECTION LOGIC (UNCHANGED)
+    # SELECTION LOGIC
     # ==============================
     loan_options = [f"ID: {r['id']} - {r['borrower']}" for _, r in loans_df.iterrows()]
     selected_loan = st.selectbox("Select Loan to View Full Statement", loan_options, key="ledger_main_select")
@@ -2416,7 +2174,7 @@ def show_ledger():
         return
 
     # ==============================
-    # BALANCE CALCULATIONS (UNCHANGED)
+    # BALANCE CALCULATIONS (PRESERVED)
     # ==============================
     current_p = float(loan_info.get("principal", 0))
     interest_amt = float(loan_info.get("interest", 0))
@@ -2432,10 +2190,11 @@ def show_ledger():
     """, unsafe_allow_html=True)
 
     # ==============================
-    # LEDGER BUILD (UNCHANGED)
+    # LEDGER BUILD (RUNNING BALANCE LOGIC)
     # ==============================
     ledger_data = []
 
+    # 1. Opening Entry
     ledger_data.append({
         "Date": loan_info.get("start_date", "-"),
         "Description": "Initial Loan Disbursement",
@@ -2444,6 +2203,7 @@ def show_ledger():
         "Balance": current_p
     })
 
+    # 2. Interest Entry
     if interest_amt > 0:
         ledger_data.append({
             "Date": loan_info.get("start_date", "-"),
@@ -2453,14 +2213,12 @@ def show_ledger():
             "Balance": current_p + interest_amt
         })
 
-    # ==============================
-    # PAYMENTS SAFETY LAYER (ADDED ONLY)
-    # ==============================
+    # 3. Payment Entries
     if payments_df is not None and not payments_df.empty:
         rel_pay = payments_df.copy()
 
         if "loan_id" in rel_pay.columns:
-            rel_pay = rel_pay[rel_pay["loan_id"] == raw_id]
+            rel_pay = rel_pay[rel_pay["loan_id"].astype(str) == str(raw_id)]
 
         if "date" in rel_pay.columns:
             rel_pay = rel_pay.sort_values("date")
@@ -2479,7 +2237,7 @@ def show_ledger():
                 "Balance": curr_run_bal
             })
 
-    # Render table (UNCHANGED)
+    # Render audit table
     st.dataframe(
         pd.DataFrame(ledger_data).style.format({
             "Debit": "{:,.0f}",
@@ -2491,16 +2249,16 @@ def show_ledger():
     )
 
     # ==============================
-    # PRINTABLE STATEMENT (UNCHANGED LOGIC + SAFE EXTENSIONS)
+    # PRINTABLE STATEMENT (HTML/PDF PREVIEW)
     # ==============================
     st.markdown("---")
 
     if st.button("✨ Preview Consolidated Statement", use_container_width=True):
 
         borrowers_df = get_cached_data("borrowers")
+        current_b_name = loan_info.get("borrower", "Unknown")
 
-        current_b_name = loan_info.get("borrower", loan_info.get("borrower_id", "Unknown"))
-
+        # Fetch detailed borrower contact info for the header
         b_details = {}
         if borrowers_df is not None and not borrowers_df.empty:
             borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
@@ -2510,7 +2268,7 @@ def show_ledger():
         navy_blue, baby_blue = "#000080", "#E1F5FE"
 
         html_statement = f"""
-        <div id="printable-area" style="font-family: Arial, sans-serif; padding: 25px; border: 1px solid #eee; background: white; color: #333;">
+        <div id="printable-area" style="font-family: 'Segoe UI', Arial, sans-serif; padding: 25px; border: 1px solid #eee; background: white; color: #333;">
             <div style="background: {navy_blue}; color: white; padding: 30px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <h1 style="margin:0;">{st.session_state.get('company_name', 'ZOE CONSULTS').upper()}</h1>
@@ -2528,7 +2286,8 @@ def show_ledger():
 
         grand_total = 0.0
 
-        client_loans = loans_df[loans_df["borrower"] == current_b_name] if "borrower" in loans_df.columns else loans_df[loans_df["borrower_id"].astype(str) == str(loan_info["borrower_id"])]
+        # Filter all loans for this specific borrower to provide a consolidated view
+        client_loans = loans_df[loans_df["borrower"] == current_b_name]
 
         for _, l_row in client_loans.iterrows():
             l_id = l_row['id']
@@ -2536,7 +2295,7 @@ def show_ledger():
 
             l_pay = 0
             if payments_df is not None and not payments_df.empty:
-                l_pay = payments_df[payments_df["loan_id"] == l_id]["amount"].sum()
+                l_pay = payments_df[payments_df["loan_id"].astype(str) == str(l_id)]["amount"].sum()
 
             l_bal = (p + i) - l_pay
             grand_total += l_bal
@@ -2559,6 +2318,9 @@ def show_ledger():
         </div>"""
 
         st.components.v1.html(html_statement, height=600, scrolling=True)
+# ==============================
+# 22. SETTINGS & BRANDING (SAAS CONTROL CENTER)
+# ==============================
 
 import streamlit as st
 import time
@@ -2570,7 +2332,7 @@ def show_settings():
     """
 
     # ==============================
-    # 🔐 TENANT SAFETY LAYER (ADDED)
+    # 🔐 TENANT SAFETY LAYER (HARD GUARD)
     # ==============================
     tenant_id = st.session_state.get("tenant_id")
 
@@ -2582,6 +2344,7 @@ def show_settings():
     # 1. FETCH TENANT DATA (SAFE + HARDENED)
     # ==============================
     try:
+        # Fetching the business profile specifically for this tenant
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
 
         if not tenant_resp.data:
@@ -2595,10 +2358,11 @@ def show_settings():
         return
 
     # ==============================
-    # BRANDING FALLBACK SAFETY (ADDED)
+    # BRANDING FALLBACK SAFETY
     # ==============================
+    # Priority: Session State -> Database -> Default Navy
     brand_color = st.session_state.get(
-        "theme_color",
+        "theme_color", 
         active_company.get("brand_color", "#2B3F87")
     )
 
@@ -2624,28 +2388,29 @@ def show_settings():
         st.markdown("**Preview:**")
         st.markdown(
             f"""
-            <div style='padding:15px;
-                        background-color:{new_color};
-                        color:white;
-                        border-radius:10px;
-                        text-align:center;
+            <div style='padding:15px; 
+                        background-color:{new_color}; 
+                        color:white; 
+                        border-radius:10px; 
+                        text-align:center; 
                         font-weight:bold;'>
                 Brand Color Preview
             </div>
-            """,
+            """, 
             unsafe_allow_html=True
         )
 
     with col2:
         st.markdown("**Company Logo:**")
-
+        
         logo_url = active_company.get("logo_url")
 
         # ==============================
-        # LOGO DISPLAY SAFETY (ADDED)
+        # LOGO DISPLAY SAFETY (CACHE BUSTING)
         # ==============================
         if logo_url:
             try:
+                # Append timestamp to URL to force browser refresh on logo update
                 logo_display_url = f"{logo_url}?t={int(time.time())}"
                 st.image(logo_display_url, use_container_width=True, caption="Current Logo")
             except Exception:
@@ -2659,17 +2424,19 @@ def show_settings():
 
     # --- SAVE ACTION ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-
+        
         updated_data = {"brand_color": new_color}
 
         # ==============================
-        # LOGO UPLOAD SAFETY (HARDENED)
+        # LOGO UPLOAD SAFETY (STORAGE BUCKET)
         # ==============================
         if logo_file:
             try:
                 bucket_name = "company-logos"
+                # Use tenant ID in file path to ensure uniqueness and security
                 file_path = f"logos/{active_company.get('id')}_logo.png"
 
+                # Upload to Supabase Storage with upsert enabled
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
@@ -2679,6 +2446,7 @@ def show_settings():
                     }
                 )
 
+                # Generate public URL for database storage
                 public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
                 updated_data["logo_url"] = public_url
 
@@ -2687,12 +2455,15 @@ def show_settings():
                 st.stop()
 
         # ==============================
-        # DATABASE UPDATE (SAFE + UNCHANGED LOGIC)
+        # DATABASE UPDATE (PERSISTENCE)
         # ==============================
         try:
             supabase.table("tenants").update(updated_data).eq("id", active_company.get("id")).execute()
-
+            
+            # Immediately update session state for real-time UI feel
             st.session_state["theme_color"] = new_color
+            if "logo_url" in updated_data:
+                st.session_state["logo_url"] = updated_data["logo_url"]
 
             st.success("✅ Branding updated successfully!")
             time.sleep(1)
@@ -2701,14 +2472,14 @@ def show_settings():
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
 # ==========================================
-# 1. CORE PAGE FUNCTIONS (Branding & Wide Layout)
+# 1. CORE PAGE FUNCTIONS (BRANDING & WIDE LAYOUT)
 # ==========================================
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# IMPORTANT: Run this as the very first Streamlit command in your app.py
+# IMPORTANT: Ensure this is called in your main entry point before show_dashboard_view()
 # st.set_page_config(layout="wide") 
 
 def get_active_color():
@@ -2831,7 +2602,6 @@ def show_dashboard_view():
         if not active_df.empty:
             recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
             
-            # Start the rows string
             rows_html = ""
             for idx, (i, r) in enumerate(recent.iterrows()):
                 bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
@@ -2840,7 +2610,6 @@ def show_dashboard_view():
                 status = str(r.get('status_clean', 'Active'))
                 due_date = r['end_date_dt'].strftime('%d %b') if pd.notna(r.get('end_date_dt')) else '-'
 
-                # Build the TR string accurately
                 rows_html += f"""
                 <tr style="background:{bg}; border-bottom: 1px solid #eee;">
                     <td style="padding:8px;">{b_name}</td>
@@ -2850,7 +2619,6 @@ def show_dashboard_view():
                 </tr>
                 """
 
-            # Combine into the final table - Ensure NO extra text is outside these tags
             full_table_html = f"""
             <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
                 <thead>
@@ -2866,11 +2634,10 @@ def show_dashboard_view():
                 </tbody>
             </table>
             """
-            
-            # THE CRITICAL STEP: Use markdown with unsafe_allow_html=True
             st.markdown(full_table_html, unsafe_allow_html=True)
         else:
             st.info("No active loans found.")
+
     # --- 10. PAYMENTS TABLE ---
     with t2:
         st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
@@ -2915,7 +2682,7 @@ def show_dashboard_view():
             status_counts.columns = ["Status", "Count"]
             fig = px.pie(status_counts, names="Status", values="Count", hole=0.5, 
                          color_discrete_sequence=["#4A90E2","#FF4B4B","#FFA500"])
-            fig.update_layout(title="Loan Status Distribution")
+            fig.update_layout(title="Loan Status Distribution", margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig, use_container_width=True)
 
     with c2:
@@ -2933,8 +2700,8 @@ def show_dashboard_view():
             merged = pd.merge(inc, exp, left_on="date_dt", right_on="date_dt", how="outer").fillna(0)
             merged.columns = ["Month","Income","Expenses"]
             fig2 = px.bar(merged, x="Month", y=["Income","Expenses"], barmode="group",
-                          color_discrete_map={"Income":"#2E7D32","Expenses":"#FF4B4B"})
-            fig2.update_layout(title="Monthly Income vs Expenses")
+                         color_discrete_map={"Income":"#2E7D32","Expenses":"#FF4B4B"})
+            fig2.update_layout(title="Monthly Income vs Expenses", margin=dict(l=0, r=0, t=30, b=0))
             st.plotly_chart(fig2, use_container_width=True)
 # ==========================================
 # FINAL APP ROUTER (REACTIVE + SAAS STABLE + THEME SAFE)
@@ -2947,6 +2714,7 @@ if __name__ == "__main__":
     # ==============================
     # 0. SAFE DEFAULTS (FIRST LOAD)
     # ==============================
+    # Establish the brand identity before anything else renders
     if "theme_color" not in st.session_state:
         st.session_state["theme_color"] = "#1E3A8A"
 
@@ -2958,6 +2726,7 @@ if __name__ == "__main__":
         # 1. AUTH FLOW (UNAUTHENTICATED)
         # ==============================
         if not st.session_state.get("logged_in"):
+            # Apply branding to the login page for professional appearance
             apply_master_theme()
             
             # Check if database is ready
@@ -2977,22 +2746,25 @@ if __name__ == "__main__":
         # ==============================
         # 2. AUTHENTICATED SESSION SAFETY
         # ==============================
-        # Reached only if logged_in == True
+        # Only reached if logged_in == True. Checks if the user session is still valid.
         check_session_timeout()
 
         # ==============================
         # 3. APPLY THEME (THEME PERSISTENCE)
         # ==============================
+        # Ensures that even after a page refresh, the user's custom brand color is applied.
         apply_master_theme()
 
         # ==============================
         # 4. SIDEBAR NAVIGATION
         # ==============================
+        # render_sidebar handles the logout logic and page selection state
         page = render_sidebar()
 
         # ==============================
         # 5. PAGE ROUTER (MAIN CONTENT)
         # ==============================
+        # Each module is called based on the user's selection from the sidebar
         if page == "Overview":
             show_dashboard_view()
 
@@ -3030,8 +2802,10 @@ if __name__ == "__main__":
             show_ledger()
 
         else:
+            # Fallback for future modules or maintenance
             st.info(f"📦 The '{page}' module is coming online soon.")
 
     except Exception as e:
+        # Global error handler to prevent "White Screen of Death"
         st.error("🚨 Application Error")
         st.exception(e)
