@@ -2720,7 +2720,7 @@ def show_dashboard_view():
 t1, t2 = st.columns(2)
 
 with t1:
-    st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='color:{brand_color};'>\\U0001F4DD Recent Portfolio Activity</h4>", unsafe_allow_html=True)
 
     if not active_df.empty:
         # Sort by date and take top 5
