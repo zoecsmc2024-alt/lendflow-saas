@@ -1483,12 +1483,20 @@ def show_calendar():
     
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
-    # 1. FETCH TENANT DATA (Filtered by Supabase)
+    # 1. FETCH DATA
     loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers") # Added to fetch names
 
-    if loans_df.empty:
+    if loans_df is None or loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
         return
+
+    # --- INJECT BORROWER NAMES (Fixes the "Strings" in Calendar & Tables) ---
+    if borrowers_df is not None and not borrowers_df.empty:
+        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
+        loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
+    else:
+        loans_df['borrower'] = "Unknown"
 
     # Standardize types for SaaS logic
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
@@ -1503,10 +1511,11 @@ def show_calendar():
     calendar_events = []
     for _, r in active_loans.iterrows():
         if pd.notna(r['end_date']):
-            # Color logic: Red for overdue, Blue for upcoming (Preserved)
+            # Color logic: Red for overdue, Blue for upcoming
             is_overdue = r['end_date'].date() < today.date()
             ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
             
+            # Use the mapped 'borrower' name here
             calendar_events.append({
                 "title": f"UGX {float(r['total_repayable']):,.0f} - {r['borrower']}",
                 "start": r['end_date'].strftime("%Y-%m-%d"),
@@ -1526,7 +1535,7 @@ def show_calendar():
     
     st.markdown("---")
 
-    # 2. DAILY WORKLOAD METRICS (Zoe Branded Cards - Indentation Fixed)
+    # 2. DAILY WORKLOAD METRICS
     due_today_df = active_loans[active_loans["end_date"].dt.date == today.date()]
     upcoming_df = active_loans[
         (active_loans["end_date"] > today) & 
@@ -1551,15 +1560,16 @@ def show_calendar():
     f1.metric("Expected Collections", f"{total_expected:,.0f} UGX")
     f2.metric("Remaining Appointments", len(this_month_df))
 
-    # 4. ACTION ITEMS (Custom HTML Tables Intact)
+    # 4. ACTION ITEMS (Formatted with Human Names)
     st.markdown("<h4 style='color: #2B3F87;'>📌 Action Items for Today</h4>", unsafe_allow_html=True)
     if due_today_df.empty:
         st.success("✨ No deadlines for today.")
     else:
-        today_rows = "".join([f"""<tr style="background:#F0F8FF;"><td style="padding:10px;"><b>#{r['id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px;text-align:right;">{r['total_repayable']:,.0f}</td><td style="padding:10px;text-align:center;"><span style="background:#2B3F87;color:white;padding:2px 8px;border-radius:10px;font-size:10px;">💰 COLLECT NOW</span></td></tr>""" for _, r in due_today_df.iterrows()])
+        # Fixed: Using 'loan_id_label' for ID and 'borrower' for name
+        today_rows = "".join([f"""<tr style="background:#F0F8FF;"><td style="padding:10px;"><b>#{r.get('loan_id_label', r['id'])}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px;text-align:right;">{r['total_repayable']:,.0f}</td><td style="padding:10px;text-align:center;"><span style="background:#2B3F87;color:white;padding:2px 8px;border-radius:10px;font-size:10px;">💰 COLLECT NOW</span></td></tr>""" for _, r in due_today_df.iterrows()])
         st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:right;">Amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
-    # 5. OVERDUE FOLLOW-UP (Red/Orange Warning System Intact)
+    # 5. OVERDUE FOLLOW-UP
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
     overdue_df = active_loans[active_loans["end_date"] < today].copy()
     if not overdue_df.empty:
@@ -1567,9 +1577,9 @@ def show_calendar():
         od_rows = ""
         for _, r in overdue_df.iterrows():
             late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-            od_rows += f"""<tr style="background:#FFF5F5;"><td style="padding:10px;"><b>#{r['id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px;color:{late_color};font-weight:bold;">{r['days_late']} Days</td><td style="padding:10px;text-align:center;"><span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r['status']}</span></td></tr>"""
-        st.markdown(f"""<div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#FF4B4B;color:white;"><th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:center;">Late By</th><th style="padding:10px;text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
-                                                                                                                      
+            # Fixed: Using 'loan_id_label' for ID and 'borrower' for name
+            od_rows += f"""<tr style="background:#FFF5F5;"><td style="padding:10px;"><b>#{r.get('loan_id_label', r['id'])}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px;color:{late_color};font-weight:bold;">{r['days_late']} Days</td><td style="padding:10px;text-align:center;"><span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r['status']}</span></td></tr>"""
+        st.markdown(f"""<div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#FF4B4B;color:white;"><th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:center;">Late By</th><th style="padding:10px;text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)                                                                
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
