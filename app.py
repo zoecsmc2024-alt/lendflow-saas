@@ -2819,6 +2819,8 @@ def show_dashboard_view():
     m1, m2, m3, m4 = st.columns(4)
     style = f"background:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
 
+    # ... previous code inside show_dashboard_view ...
+
     m1.markdown(f'<div style="{style}"><b>💰 ACTIVE PRINCIPAL</b><h3>{total_issued:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m2.markdown(f'<div style="{style}"><b>📈 EXPECTED INTEREST</b><h3>{total_interest_expected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m3.markdown(f'<div style="{style.replace("#fff","#F0FFF4")}"><b>✅ TOTAL COLLECTED</b><h3>{total_collected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
@@ -2826,95 +2828,64 @@ def show_dashboard_view():
 
     st.write("---")
 
-    # --- 9. RECENT LOANS TABLE ---
-t1, t2 = st.columns(2)
+    # --- 9. RECENT LOANS TABLE (INDENTED) ---
+    t1, t2 = st.columns(2)
 
-with t1:
-    st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+    with t1:
+        st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
 
-    if not active_df.empty:
-        # Sort and take top 5
-        recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
-        rows = ""
+        if not active_df.empty:
+            recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
+            rows = ""
+            for idx, (i, r) in enumerate(recent.iterrows()):
+                bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
+                b_name = str(r.get('borrower_name', 'Unknown'))
+                principal = r.get('principal_clean', 0)
+                status = str(r.get('status_clean', 'Active'))
+                due_date = r['end_date_dt'].strftime('%d %b') if pd.notna(r.get('end_date_dt')) else '-'
 
-        # FIX: Use enumerate to get a clean 0,1,2 sequence for background toggling
-        for idx, (i, r) in enumerate(recent.iterrows()):
-            bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
-            
-            # Clean variables to prevent string breaks
-            b_name = str(r.get('borrower_name', 'Unknown'))
-            principal = r.get('principal_clean', 0)
-            status = str(r.get('status_clean', 'Active'))
-            due_date = r['end_date_dt'].strftime('%d %b') if pd.notna(r.get('end_date_dt')) else '-'
-
-            rows += f"""
-            <tr style="background:{bg}; border-bottom: 1px solid #eee;">
-                <td style="padding:8px;">{b_name}</td>
-                <td style="padding:8px; text-align:right; color:{brand_color}; font-weight:bold;">
-                    {principal:,.0f}
-                </td>
-                <td style="padding:8px; text-align:center;">{status}</td>
-                <td style="padding:8px; text-align:center;">{due_date}</td>
-            </tr>
-            """
-
-        st.markdown(f"""
-        <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
-            <thead>
-                <tr style="background:{brand_color}; color:white;">
-                    <th style="padding:10px;">Borrower</th>
-                    <th style="padding:10px;">Principal</th>
-                    <th style="padding:10px;">Status</th>
-                    <th style="padding:10px;">Due</th>
+                rows += f"""
+                <tr style="background:{bg}; border-bottom: 1px solid #eee;">
+                    <td style="padding:8px;">{b_name}</td>
+                    <td style="padding:8px; text-align:right; color:{brand_color}; font-weight:bold;">{principal:,.0f}</td>
+                    <td style="padding:8px; text-align:center;">{status}</td>
+                    <td style="padding:8px; text-align:center;">{due_date}</td>
                 </tr>
-            </thead>
-            <tbody>{rows}</tbody>
-        </table>
-        """, unsafe_allow_html=True)
+                """
 
-# --- 10. PAYMENTS TABLE (SAFE) ---
-with t2:
-    st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
+                <thead>
+                    <tr style="background:{brand_color}; color:white;">
+                        <th style="padding:10px;">Borrower</th><th style="padding:10px;">Principal</th>
+                        <th style="padding:10px;">Status</th><th style="padding:10px;">Due</th>
+                    </tr>
+                </thead>
+                <tbody>{rows}</tbody>
+            </table>
+            """, unsafe_allow_html=True)
 
-    if pay_df is not None and not pay_df.empty:
-        pay_df["amount_clean"] = pd.to_numeric(pay_df.get("amount"), errors="coerce").fillna(0)
-        recent_pay = pay_df.sort_values("date", ascending=False).head(5)
+    # --- 10. PAYMENTS TABLE (INDENTED) ---
+    with t2:
+        st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
+        if pay_df is not None and not pay_df.empty:
+            recent_pay = pay_df.sort_values("date", ascending=False).head(5)
+            pay_rows = ""
+            for idx, (i, r) in enumerate(recent_pay.iterrows()):
+                bg = "#F0F8FF" if idx % 2 == 0 else "#FFFFFF"
+                p_name = str(r.get('borrower', 'Unknown'))
+                p_amt = r.get('amount_clean', 0)
+                p_date = pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else '-'
+                pay_rows += f"""<tr style="background:{bg};"><td>{p_name}</td><td style="text-align:right; color:green;">{p_amt:,.0f}</td><td style="text-align:center;">{p_date}</td></tr>"""
 
-        pay_rows = ""
-        # FIX: Use enumerate for zebra striping
-        for idx, (i, r) in enumerate(recent_pay.iterrows()):
-            bg = "#F0F8FF" if idx % 2 == 0 else "#FFFFFF"
-            
-            p_name = str(r.get('borrower', 'Unknown'))
-            p_amt = r.get('amount_clean', 0)
-            p_date = pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else '-'
+            st.markdown(f"""<table style="width:100%; font-size:13px; border-collapse:collapse;">
+                <tr style="background:#2E7D32; color:white;"><th>Borrower</th><th>Amount</th><th>Date</th></tr>
+                {pay_rows}</table>""", unsafe_allow_html=True)
 
-            pay_rows += f"""
-            <tr style="background:{bg}; border-bottom: 1px solid #eee;">
-                <td style="padding:8px;">{p_name}</td>
-                <td style="padding:8px; text-align:right; color:green; font-weight:bold;">
-                    {p_amt:,.0f}
-                </td>
-                <td style="padding:8px; text-align:center;">{p_date}</td>
-            </tr>
-            """
-
-        st.markdown(f"""
-        <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
-            <thead>
-                <tr style="background:#2E7D32; color:white;">
-                    <th style="padding:10px;">Borrower</th>
-                    <th style="padding:10px;">Amount</th>
-                    <th style="padding:10px;">Date</th>
-                </tr>
-            </thead>
-            <tbody>{pay_rows}</tbody>
-        </table>
-        """, unsafe_allow_html=True)
-
-    # --- 11. CHARTS (SAFE MERGE FIX) ---
+    # --- 11. CHARTS (INDENTED) ---
     st.write("---")
     c1, c2 = st.columns(2)
+    # ... ensure the rest of the chart logic is also indented ...
 
     with c1:
         if not df_clean.empty:
