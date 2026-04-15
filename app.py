@@ -2953,7 +2953,7 @@ if __name__ == "__main__":
         if not st.session_state.get("logged_in"):
 
             apply_master_theme()
-            run_auth_ui(supabase)
+            def run_auth_ui(supabase_client):
             st.stop()
 
         # ==============================
