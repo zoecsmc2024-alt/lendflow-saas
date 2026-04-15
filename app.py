@@ -447,24 +447,24 @@ def render_sidebar():
                         default_index = i
                         break
 
-            active_company_name = st.selectbox(
+            Active_company_name = st.selectbox(
                 "Business Portal:",
                 options,
                 index=default_index,
                 key="sidebar_portal_select"
             )
 
-            active_company = tenant_map.get(active_company_name, None)
+            Active_company = tenant_map.get(Active_company_name, None)
 
             # ------------------------------
             # CRITICAL SYNC FIX (NO LOGIC LOSS)
             # ------------------------------
-            if active_company:
+            if Active_company:
                 # Only trigger a rerun if the tenant actually changed
-                if str(st.session_state.get('tenant_id')) != str(active_company['id']):
-                    st.session_state['tenant_id'] = active_company['id']
-                    st.session_state['theme_color'] = active_company.get('brand_color', '#2B3F87')
-                    st.session_state['company'] = active_company.get('name')
+                if str(st.session_state.get('tenant_id')) != str(Active_company['id']):
+                    st.session_state['tenant_id'] = Active_company['id']
+                    st.session_state['theme_color'] = Active_company.get('brand_color', '#2B3F87')
+                    st.session_state['company'] = Active_company.get('name')
 
                     # Clear cache so the new company's data loads immediately
                     st.cache_data.clear()
@@ -483,7 +483,7 @@ def render_sidebar():
         _, col_mid, _ = st.columns([1, 2, 1])
 
         with col_mid:
-            logo_val = active_company.get('logo_url') if active_company else None
+            logo_val = Active_company.get('logo_url') if Active_company else None
 
             # Logic to handle missing or null logo values
             if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
@@ -641,7 +641,7 @@ def show_borrowers():
         with col1:
             search = st.text_input("🔍 Search Name or Phone", key="bor_search").lower()
         with col2:
-            status_filter = st.selectbox("Filter Status", ["All", "Active", "Inactive"], key="bor_status_filt")
+            status_filter = st.selectbox("Filter Status", ["All", "Active", "InActive"], key="bor_status_filt")
 
         if not df.empty:
             filtered_df = df.copy()
@@ -865,9 +865,9 @@ def show_loans():
 
     # Standardize Borrowers
     if not borrowers_df.empty:
-        active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
+        Active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
     else:
-        active_borrowers = pd.DataFrame()
+        Active_borrowers = pd.DataFrame()
 
     if loans_df.empty:
         loans_df = pd.DataFrame(columns=[
@@ -885,9 +885,9 @@ def show_loans():
 
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
-    closed_mask = loans_df["balance"] <= 0
-    loans_df.loc[closed_mask, "status"] = "Closed"
-    loans_df.loc[closed_mask, "balance"] = 0
+    CLOSED_mask = loans_df["balance"] <= 0
+    loans_df.loc[CLOSED_mask, "status"] = "CLOSED"
+    loans_df.loc[CLOSED_mask, "balance"] = 0
 
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
@@ -901,7 +901,7 @@ def show_loans():
         def style_loan_table(row):
             status = str(row.get("status", "")).upper()
             colors = {
-                "ACTIVE": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
+                "Active": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
                 "ROLLED": "#7B1FA2", "BCF": "#FFA500", "PENDING": "#FBC02D"
             }
             s_color = colors.get(status, "#9E9E9E")
@@ -969,14 +969,14 @@ def show_loans():
     # TAB: NEW LOAN (Supabase Integration)
     # ==============================
     with tab_add:
-        if active_borrowers.empty:
+        if Active_borrowers.empty:
             st.info("💡 Tip: Activate a borrower first.")
         else:
             with st.form("loan_issue_form"):
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
                 
-                borrower_map = dict(zip(active_borrowers["name"], active_borrowers["id"]))
+                borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
                 selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
                 selected_id = borrower_map[selected_name]
                 
@@ -1003,7 +1003,7 @@ def show_loans():
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due), 
                         "amount_paid": 0.0,
-                        "status": "ACTIVE", 
+                        "status": "Active", 
                         "start_date": str(date_issued), 
                         "end_date": str(date_due),
                         "tenant_id": t_id
@@ -1021,9 +1021,9 @@ def show_loans():
         st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
         
         if loans_df.empty:
-            st.info("No active loans to roll over.")
+            st.info("No Active loans to roll over.")
         else:
-            eligible_loans = loans_df[loans_df["status"] != "Closed"]
+            eligible_loans = loans_df[loans_df["status"] != "CLOSED"]
             
             if eligible_loans.empty:
                 st.success("All loans are currently settled! ✨")
@@ -1075,7 +1075,7 @@ def show_loans():
                 c1, c2 = st.columns(2)
                 e_borr = c1.text_input("Borrower", value=loan_to_edit['borrower'])
                 e_princ = c1.number_input("Principal", value=float(loan_to_edit['principal']))
-                e_stat = c2.selectbox("Status", ["Active", "Pending", "Closed", "Overdue", "BCF"], index=0)
+                e_stat = c2.selectbox("Status", ["Active", "Pending", "CLOSED", "Overdue", "BCF"], index=0)
                 
                 if st.form_submit_button("💾 Save Changes"):
                     update_data = pd.DataFrame([{
@@ -1113,7 +1113,7 @@ def get_user_identity():
 # -------------------------------
 # STATUS NORMALIZER
 # -------------------------------
-VALID_STATUSES = {"ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
+VALID_STATUSES = {"Active", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
 
 def normalize_status(status):
     """Ensures loan statuses adhere to enterprise naming conventions"""
@@ -1166,7 +1166,7 @@ def show_payments():
     borrowers_df = get_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("ℹ️ No active loans found to receive payments.")
+        st.info("ℹ️ No Active loans found to receive payments.")
         return
 
     # Map borrower names for the UI dropdown
@@ -1184,16 +1184,16 @@ def show_payments():
     # TAB 1: RECORD PAYMENT
     # ==============================
     with tab_new:
-        # Filter for non-closed loans
-        active_loans = loans_df[loans_df["status"].astype(str).str.upper() != "CLOSED"].copy()
+        # Filter for non-CLOSED loans
+        Active_loans = loans_df[loans_df["status"].astype(str).str.upper() != "CLOSED"].copy()
 
-        if active_loans.empty:
+        if Active_loans.empty:
             st.success("🎉 Portfolio Clean: No outstanding payments due!")
         else:
             # Prepare display labels for the dropdown
-            active_loans["borrower_name"] = active_loans["borrower"].fillna("Unknown")
+            Active_loans["borrower_name"] = Active_loans["borrower"].fillna("Unknown")
             
-            loan_options = active_loans.apply(
+            loan_options = Active_loans.apply(
                 lambda x: f"ID: {x['loan_id']} | {x['borrower_name']} (Bal: {x.get('balance', 0):,.0f})",
                 axis=1
             ).tolist()
@@ -1203,7 +1203,7 @@ def show_payments():
             # Resolve Selected Loan
             try:
                 sel_id = selected_option.split(" | ")[0].replace("ID: ", "").strip()
-                loan = active_loans[active_loans["loan_id"].astype(str) == str(sel_id)].iloc[0]
+                loan = Active_loans[Active_loans["loan_id"].astype(str) == str(sel_id)].iloc[0]
             except:
                 st.error("Error resolving selected loan.")
                 st.stop()
@@ -1247,7 +1247,7 @@ def show_payments():
                         # 2. Update Loan Balance/Status
                         new_total_paid = paid_so_far + actual_pay
                         # Buffer of 10 UGX for rounding precision
-                        new_status = "CLOSED" if new_total_paid >= (total_rep - 10) else "ACTIVE"
+                        new_status = "CLOSED" if new_total_paid >= (total_rep - 10) else "Active"
 
                         loan_update = pd.DataFrame([{
                             "loan_id": loan["loan_id"],
@@ -1337,8 +1337,8 @@ def show_collateral():
     # ==============================
     if loans_df is not None and not loans_df.empty:
         # Filter for loans that actually need collateral (Active, Overdue, Pending)
-        active_statuses = ["active", "overdue", "pending"]
-        available_loans = loans_df[loans_df["status"].str.lower().isin(active_statuses)].copy()
+        Active_statuses = ["Active", "overdue", "pending"]
+        available_loans = loans_df[loans_df["status"].str.lower().isin(Active_statuses)].copy()
     else:
         available_loans = pd.DataFrame()
 
@@ -1350,7 +1350,7 @@ def show_collateral():
     # ==============================
     with tab_reg:
         if available_loans.empty:
-            st.warning("⚠️ No active loans found to attach collateral to.")
+            st.warning("⚠️ No Active loans found to attach collateral to.")
         else:
             with st.form("collateral_reg_form", clear_on_submit=True):
                 st.write("### Link Asset to Loan")
@@ -1496,7 +1496,7 @@ def show_calendar():
     # EMPTY STATE (UNCHANGED LOGIC)
     # ==============================
     if loans_df is None or loans_df.empty:
-        st.info("📅 Calendar is clear! No active loans to track.")
+        st.info("📅 Calendar is clear! No Active loans to track.")
         return
 
     # ==============================
@@ -1535,14 +1535,14 @@ def show_calendar():
 
     today = pd.Timestamp.today().normalize()
 
-    # Filter out closed loans for the calendar view
-    active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "closed"].copy()
+    # Filter out CLOSED loans for the calendar view
+    Active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "CLOSED"].copy()
 
     # ==============================
     # CALENDAR EVENTS (UNCHANGED LOGIC + SAFETY)
     # ==============================
     calendar_events = []
-    for _, r in active_loans.iterrows():
+    for _, r in Active_loans.iterrows():
         if pd.notna(r[l_end_col]):
             try:
                 # Compare only dates to avoid timezone/time mismatch
@@ -1578,12 +1578,12 @@ def show_calendar():
     # METRICS (SAFETY ENHANCED ONLY)
     # ==============================
     try:
-        due_today_df = active_loans[active_loans[l_end_col].dt.date == today.date()]
-        upcoming_df = active_loans[
-            (active_loans[l_end_col] > today) & 
-            (active_loans[l_end_col] <= today + pd.Timedelta(days=7))
+        due_today_df = Active_loans[Active_loans[l_end_col].dt.date == today.date()]
+        upcoming_df = Active_loans[
+            (Active_loans[l_end_col] > today) & 
+            (Active_loans[l_end_col] <= today + pd.Timedelta(days=7))
         ]
-        overdue_count = active_loans[active_loans[l_end_col] < today].shape[0]
+        overdue_count = Active_loans[Active_loans[l_end_col] < today].shape[0]
     except Exception:
         due_today_df = pd.DataFrame()
         upcoming_df = pd.DataFrame()
@@ -1614,10 +1614,10 @@ def show_calendar():
     # ==============================
     st.markdown("### 🏢 Master Loan Ledger")
 
-    if active_loans.empty:
-        st.info("ℹ️ No active loan records found.")
+    if Active_loans.empty:
+        st.info("ℹ️ No Active loan records found.")
     else:
-        df = active_loans.copy()
+        df = Active_loans.copy()
 
         def find_col(names):
             for col in df.columns:
@@ -1894,7 +1894,7 @@ def show_payroll():
     if df is None or df.empty:
         df = pd.DataFrame(columns=required_keys)
 
-    # Filter data to only show records for the active tenant
+    # Filter data to only show records for the Active tenant
     if "tenant_id" in df.columns:
         df = df[df["tenant_id"].astype(str) == str(current_tenant)]
     else:
@@ -2284,7 +2284,7 @@ def show_ledger():
     payments_df = get_cached_data("payments")
 
     if loans_df is None or loans_df.empty:
-        st.info("💡 Your system is clear! No active loans found.")
+        st.info("💡 Your system is clear! No Active loans found.")
         return
 
     # ==============================
@@ -2494,7 +2494,7 @@ def show_settings():
     tenant_id = st.session_state.get("tenant_id")
 
     if not tenant_id:
-        st.warning("⚠️ No active tenant detected. Please log in.")
+        st.warning("⚠️ No Active tenant detected. Please log in.")
         return
 
     # ==============================
@@ -2508,7 +2508,7 @@ def show_settings():
             st.error("❌ Business profile not found.")
             return
 
-        active_company = tenant_resp.data[0]
+        Active_company = tenant_resp.data[0]
 
     except Exception as e:
         st.error(f"❌ Connection Error: {e}")
@@ -2520,7 +2520,7 @@ def show_settings():
     # Priority: Session State -> Database -> Default Navy
     brand_color = st.session_state.get(
         "theme_color", 
-        active_company.get("brand_color", "#2B3F87")
+        Active_company.get("brand_color", "#2B3F87")
     )
 
     st.markdown(
@@ -2534,11 +2534,11 @@ def show_settings():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.markdown(f"**Current Business Name:** {active_company.get('name', 'Unknown')}")
+        st.markdown(f"**Current Business Name:** {Active_company.get('name', 'Unknown')}")
 
         new_color = st.color_picker(
             "🎨 Change Brand Color",
-            active_company.get('brand_color', '#2B3F87'),
+            Active_company.get('brand_color', '#2B3F87'),
             key="settings_color_picker"
         )
 
@@ -2560,7 +2560,7 @@ def show_settings():
     with col2:
         st.markdown("**Company Logo:**")
         
-        logo_url = active_company.get("logo_url")
+        logo_url = Active_company.get("logo_url")
 
         # ==============================
         # LOGO DISPLAY SAFETY (CACHE BUSTING)
@@ -2591,7 +2591,7 @@ def show_settings():
             try:
                 bucket_name = "company-logos"
                 # Use tenant ID in file path to ensure uniqueness and security
-                file_path = f"logos/{active_company.get('id')}_logo.png"
+                file_path = f"logos/{Active_company.get('id')}_logo.png"
 
                 # Upload to Supabase Storage with upsert enabled
                 supabase.storage.from_(bucket_name).upload(
@@ -2615,7 +2615,7 @@ def show_settings():
         # DATABASE UPDATE (PERSISTENCE)
         # ==============================
         try:
-            supabase.table("tenants").update(updated_data).eq("id", active_company.get("id")).execute()
+            supabase.table("tenants").update(updated_data).eq("id", Active_company.get("id")).execute()
             
             # Immediately update session state for real-time UI feel
             st.session_state["theme_color"] = new_color
@@ -2636,7 +2636,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-def get_active_color():
+def get_Active_color():
     """Helper to get the current theme color for consistent UI styling."""
     return st.session_state.get('theme_color', '#1E3A8A')
 
@@ -2646,7 +2646,7 @@ def show_dashboard_view():
     Upgraded: performance layer, safer finance engine, SaaS-safe computation.
     """
     # 0. INITIALIZE THEME (Prevents NameError for brand_color)
-    brand_color = get_active_color()
+    brand_color = get_Active_color()
     
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
 
@@ -2715,13 +2715,13 @@ def show_dashboard_view():
 
     # --- 6. PRE-FILTER ENGINE ---
     today = pd.Timestamp.now().normalize()
-    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    active_df = df_clean[df_clean["status_clean"].isin(active_statuses)].copy()
-    overdue_df = active_df[active_df["end_date_dt"] < today]
+    Active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+    Active_df = df_clean[df_clean["status_clean"].isin(Active_statuses)].copy()
+    overdue_df = Active_df[Active_df["end_date_dt"] < today]
 
     # --- 7. CORE METRICS ---
-    total_issued = active_df["principal_clean"].sum()
-    total_interest_expected = active_df["interest_clean"].sum()
+    total_issued = Active_df["principal_clean"].sum()
+    total_interest_expected = Active_df["interest_clean"].sum()
     total_collected = df_clean["paid_clean"].sum()
     overdue_count = len(overdue_df)
 
@@ -2729,7 +2729,7 @@ def show_dashboard_view():
     m1, m2, m3, m4 = st.columns(4)
     card_style = f"background:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
 
-    m1.markdown(f'<div style="{card_style}"><b>💰 ACTIVE PRINCIPAL</b><h3>{total_issued:,.0f} UGX</h3></div>', unsafe_allow_html=True)
+    m1.markdown(f'<div style="{card_style}"><b>💰 Active PRINCIPAL</b><h3>{total_issued:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m2.markdown(f'<div style="{card_style}"><b>📈 EXPECTED INTEREST</b><h3>{total_interest_expected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m3.markdown(f'<div style="{card_style.replace("#fff","#F0FFF4")}"><b>✅ TOTAL COLLECTED</b><h3>{total_collected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m4.markdown(f'<div style="{card_style.replace("#fff","#FFF5F5")}"><b>🚨 OVERDUE FILES</b><h3>{overdue_count}</h3></div>', unsafe_allow_html=True)
@@ -2742,8 +2742,8 @@ def show_dashboard_view():
     with t1:
         st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
 
-        if not active_df.empty:
-            recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
+        if not Active_df.empty:
+            recent = Active_df.sort_values("end_date_dt", ascending=False).head(5)
             rows_html = ""
             for idx, (i, r) in enumerate(recent.iterrows()):
                 bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
@@ -2762,7 +2762,7 @@ def show_dashboard_view():
             </table>"""
             st.components.v1.html(full_table_html, height=250)
         else:
-            st.info("No active loans found.")
+            st.info("No Active loans found.")
 
     # --- 10. PAYMENTS TABLE (Fixed Indentation) ---
     with t2:
@@ -2799,7 +2799,7 @@ def show_dashboard_view():
             # ... Income/Expense Logic ...
             st.write("Monthly Cashflow View Active")
 # ==========================================
-# FINAL APP ROUTER (REACTIVE & STABLE)
+# FINAL APP ROUTER (REActive & STABLE)
 # ==========================================
 
 if __name__ == "__main__":
