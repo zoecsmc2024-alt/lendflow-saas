@@ -2717,83 +2717,98 @@ def show_dashboard_view():
     st.write("---")
 
     # --- 9. RECENT LOANS TABLE ---
-    t1, t2 = st.columns(2)
+t1, t2 = st.columns(2)
 
-    with t1:
-        st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+with t1:
+    st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
 
-        if not active_df.empty:
-            recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
-            
-            rows_html = ""
-            for idx, (i, r) in enumerate(recent.iterrows()):
-                bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
-                b_name = str(r.get('borrower_name', 'Unknown'))
-                principal = r.get('principal_clean', 0)
-                status = str(r.get('status_clean', 'Active'))
-                due_date = r['end_date_dt'].strftime('%d %b') if pd.notna(r.get('end_date_dt')) else '-'
+    if not active_df.empty:
+        # Sort by date and take top 5
+        recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
+        
+        rows_html = ""
+        for idx, (i, r) in enumerate(recent.iterrows()):
+            bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
+            b_name = str(r.get('borrower_name', 'Unknown'))
+            principal = r.get('principal_clean', 0)
+            status = str(r.get('status_clean', 'Active'))
+            due_date = r['end_date_dt'].strftime('%d %b') if pd.notna(r.get('end_date_dt')) else '-'
 
-                rows_html += f"""
-                <tr style="background:{bg}; border-bottom: 1px solid #eee;">
-                    <td style="padding:8px;">{b_name}</td>
-                    <td style="padding:8px; text-align:right; color:{brand_color}; font-weight:bold;">{principal:,.0f}</td>
-                    <td style="padding:8px; text-align:center;">{status}</td>
-                    <td style="padding:8px; text-align:center;">{due_date}</td>
-                </tr>
-                """
-
-            full_table_html = f"""
-            <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
-                <thead>
-                    <tr style="background:{brand_color}; color:white;">
-                        <th style="padding:10px; text-align:left;">Borrower</th>
-                        <th style="padding:10px; text-align:right;">Principal</th>
-                        <th style="padding:10px; text-align:center;">Status</th>
-                        <th style="padding:10px; text-align:center;">Due</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows_html}
-                </tbody>
-            </table>
+            rows_html += f"""
+            <tr style="background:{bg}; border-bottom: 1px solid #eee;">
+                <td style="padding:8px;">{b_name}</td>
+                <td style="padding:8px; text-align:right; color:{brand_color}; font-weight:bold;">{principal:,.0f}</td>
+                <td style="padding:8px; text-align:center;">{status}</td>
+                <td style="padding:8px; text-align:center;">{due_date}</td>
+            </tr>
             """
-            st.markdown(full_table_html, unsafe_allow_html=True)
-        else:
-            st.info("No active loans found.")
 
-    # --- 10. PAYMENTS TABLE ---
-    with t2:
-        st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
-        if pay_df is not None and not pay_df.empty:
-            pay_df["amount_clean"] = pd.to_numeric(pay_df.get("amount"), errors="coerce").fillna(0)
-            recent_pay = pay_df.sort_values("date", ascending=False).head(5)
-            pay_rows = ""
-            for idx, (i, r) in enumerate(recent_pay.iterrows()):
-                bg = "#F0F8FF" if idx % 2 == 0 else "#FFFFFF"
-                p_name = str(r.get('borrower', 'Unknown'))
-                p_amt = r.get('amount_clean', 0)
-                p_date = pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else '-'
-                
-                pay_rows += f"""
-                <tr style="background:{bg}; border-bottom: 1px solid #eee;">
-                    <td style="padding:8px;">{p_name}</td>
-                    <td style="padding:8px; text-align:right; color:#2E7D32; font-weight:bold;">{p_amt:,.0f}</td>
-                    <td style="padding:8px; text-align:center;">{p_date}</td>
-                </tr>"""
+        full_table_html = f"""
+        <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee; font-family: sans-serif;">
+            <thead>
+                <tr style="background:{brand_color}; color:white;">
+                    <th style="padding:10px; text-align:left;">Borrower</th>
+                    <th style="padding:10px; text-align:right;">Principal</th>
+                    <th style="padding:10px; text-align:center;">Status</th>
+                    <th style="padding:10px; text-align:center;">Due</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+        """
 
-            st.markdown(f"""
-            <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
-                <thead>
-                    <tr style="background:#2E7D32; color:white;">
-                        <th style="padding:10px; text-align:left;">Borrower</th>
-                        <th style="padding:10px; text-align:right;">Amount</th>
-                        <th style="padding:10px; text-align:center;">Date</th>
-                    </tr>
-                </thead>
-                <tbody>{pay_rows}</tbody>
-            </table>""", unsafe_allow_html=True)
-        else:
-            st.write("No recent payments found.")
+        # Using iframe-safe rendering to ensure specific height and layout stability
+        st.components.v1.html(full_table_html, height=250, scrolling=False)
+
+    else:
+        st.info("No active loans found.")
+
+
+# --- 10. PAYMENTS TABLE ---
+with t2:
+    st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
+
+    if pay_df is not None and not pay_df.empty:
+        pay_df["amount_clean"] = pd.to_numeric(pay_df.get("amount"), errors="coerce").fillna(0)
+        recent_pay = pay_df.sort_values("date", ascending=False).head(5)
+
+        pay_rows = ""
+        for idx, (i, r) in enumerate(recent_pay.iterrows()):
+            bg = "#F0F8FF" if idx % 2 == 0 else "#FFFFFF"
+            p_name = str(r.get('borrower', 'Unknown'))
+            p_amt = r.get('amount_clean', 0)
+            p_date = pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else '-'
+            
+            pay_rows += f"""
+            <tr style="background:{bg}; border-bottom: 1px solid #eee;">
+                <td style="padding:8px;">{p_name}</td>
+                <td style="padding:8px; text-align:right; color:#2E7D32; font-weight:bold;">{p_amt:,.0f}</td>
+                <td style="padding:8px; text-align:center;">{p_date}</td>
+            </tr>
+            """
+
+        payments_table_html = f"""
+        <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee; font-family: sans-serif;">
+            <thead>
+                <tr style="background:#2E7D32; color:white;">
+                    <th style="padding:10px; text-align:left;">Borrower</th>
+                    <th style="padding:10px; text-align:right;">Amount</th>
+                    <th style="padding:10px; text-align:center;">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {pay_rows}
+            </tbody>
+        </table>
+        """
+
+        # Consistent height with the Loans table for a balanced UI
+        st.components.v1.html(payments_table_html, height=250, scrolling=False)
+
+    else:
+        st.write("No recent payments found.")
 
     # --- 11. CHARTS ---
     st.write("---")
