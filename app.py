@@ -1299,7 +1299,9 @@ def show_loans():
                     if save_data("loans", new_loan_df):
                         st.success(f"✅ Loan {readable_label} issued!")
                         st.rerun()
-# ==============================
+
+
+     # ==============================
 # TAB: ACTIONS (ROLLOVER ENGINE)
 # ==============================
 with tab_actions:
@@ -1381,6 +1383,7 @@ with tab_actions:
                 supabase.table("loans").delete().eq("id", target_id).execute()
                 st.warning("Loan Deleted.")
                 st.rerun()
+
 
 
 # ==============================
