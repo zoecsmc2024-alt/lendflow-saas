@@ -1087,26 +1087,30 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import random
-# 1. Fetch data first so active_borrowers is defined
-loans_df = get_cached_data("loans")
-borrowers_df = get_cached_data("borrowers")
+def show_loans():
+    st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
+    
+    # STEP A: Load Data FIRST
+    loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
+    
+    # STEP B: Define active_borrowers (Fixes image_ee6762.png)
+    if borrowers_df is not None and not borrowers_df.empty:
+        # Standardize column names
+        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        active_borrowers = borrowers_df[borrowers_df["status"].astype(str).str.upper() == "ACTIVE"]
+        bor_name_col = next((c for c in borrowers_df.columns if 'name' in c), "name")
+    else:
+        active_borrowers = pd.DataFrame()
+        bor_name_col = "name"
 
-# 2. Process borrowers (Fixes image_ee6762.png)
-if borrowers_df is not None and not borrowers_df.empty:
-    # Standardize column names
-    borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
-    # Define active_borrowers globally within the function scope
-    active_borrowers = borrowers_df[borrowers_df["status"].astype(str).str.upper() == "ACTIVE"]
-else:
-    active_borrowers = pd.DataFrame()
-
-# 3. Define the tabs (Fixes image_edfea5.png and image_ef5c1d.png)
-tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-    "📊 Portfolio View", 
-    "➕ New Loan", 
-    "🔧 Manage/Edit", 
-    "⚙️ Actions"
-])
+    # STEP C: Define TABS (Fixes image_edfea5.png, image_eed8fb.png, and image_ef5c1d.png)
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+        "📊 Portfolio View", 
+        "➕ New Loan", 
+        "🔧 Manage/Edit", 
+        "⚙️ Actions"
+    ])
 # -------------------------------
 # STATUS STANDARDIZER (CRITICAL)
 # -------------------------------
