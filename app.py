@@ -840,77 +840,41 @@ def save_data_saas(table_name, df):
 
 
 # ==============================
-# 13. LOANS MANAGEMENT PAGE (SAAS UPGRADE)
+# 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
 # ==============================
+
 def show_loans():
-    # 1. Load Data
-    loans_df = get_data("loans")
-    borrowers_df = get_data("borrowers")
-
-    if loans_df is None or loans_df.empty:
-        st.info("No loans available.")
-        return # FIXED: Removed colon
-
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    st.markdown(f"<h2 style='color: {brand_color};'>💵 Loans Management</h2>", unsafe_allow_html=True)
+    """
+    Core engine for issuing and managing loan agreements.
+    Preserves Midnight Blue branding and Peachy Luxe themes.
+    """
+    st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
-    tenant_id = get_current_tenant()
-
-    # ==============================
-    # 🧠 NAME MAPPING ENGINE (Fixes the ID strings issue)
-    # ==============================
-    if st.session_state.get("active_tenant_cache") != tenant_id:
-        st.session_state.pop("loans_df_cache", None)
-        st.session_state["active_tenant_cache"] = tenant_id
-
-    # ==============================
-    # 1. LOAD & NORMALIZE DATA
-    # ==============================
-    if "loans_df_cache" in st.session_state and st.session_state.loans_df_cache is not None:
-        loans_df = st.session_state.loans_df_cache.copy()
-    else:
-        loans_df = get_data("loans")
-        st.session_state.loans_df_cache = loans_df.copy() if loans_df is not None else None
-
-    borrowers_df = get_data("borrowers")
+    # 1. LOAD DATA FROM SUPABASE
+    # Filters automatically by tenant_id via our helper
+    loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
     
-    # --- FIX: NAME MAPPING ENGINE ---
-    if borrowers_df is not None and not borrowers_df.empty and loans_df is not None:
-        borrowers_df.columns = [c.lower() for c in borrowers_df.columns]
-        b_id_col = next((c for c in borrowers_df.columns if 'id' in c), None)
-        b_name_col = next((c for c in borrowers_df.columns if 'name' in c), None)
-        
-        if b_id_col and b_name_col:
-            name_map = dict(zip(borrowers_df[b_id_col].astype(str), borrowers_df[b_name_col]))
-            loan_b_col = next((c for c in loans_df.columns if 'borrower' in c), 'borrower_id')
-            loans_df['borrower_name'] = loans_df[loan_b_col].astype(str).map(name_map).fillna(loans_df[loan_b_col])
-    
-    if borrowers_df is not None and not borrowers_df.empty:
-        stat_col = next((c for c in borrowers_df.columns if 'status' in c), None)
-        if stat_col:
-            active_borrowers = borrowers_df[borrowers_df[stat_col].astype(str).str.lower() == "active"].copy()
-        else:
-            active_borrowers = borrowers_df.copy()
+    # Standardize Borrowers
+    if not borrowers_df.empty:
+        active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
     else:
         active_borrowers = pd.DataFrame()
     
-    if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=[
-            "loan_id", "borrower_name", "principal", "interest",
-            "total_repayable", "amount_paid", "balance",
-            "status", "start_date", "end_date", "tenant_id"
-        ])
+    if loans_df.empty:
+        loans_df = pd.DataFrame(columns=["id", "borrower", "principal", "interest", "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date"])
     
+    # 2. AUTO-CALC & DATA CLEANING (Preserved Logic)
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
         if col in loans_df.columns:
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
 
-    if not loans_df.empty:
-        loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
-        closed_mask = loans_df["balance"] <= 0
-        loans_df.loc[closed_mask, "status"] = "Closed"
-
+    # Balance and Auto-Close Engine
+    loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
+    closed_mask = loans_df["balance"] <= 0
+    loans_df.loc[closed_mask, "status"] = "Closed"
+    loans_df.loc[closed_mask, "balance"] = 0
     # --- 2. DEFINE TABS (CRITICAL: Variable names must match 'with' statements) ---
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
