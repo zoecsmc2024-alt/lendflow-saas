@@ -133,6 +133,17 @@ def upload_image(file, bucket="collateral-photos"):
 # ==============================
 # 5. DATA LAYER (MERGED - NO DUPLICATES)
 # ==============================
+
+# INITIALIZE FIRST
+loans_df = pd.DataFrame() 
+borrowers_df = pd.DataFrame()
+
+# THEN ATTEMPT TO FETCH
+try:
+    loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
+except Exception as e:
+    st.error(f"Error fetching data: {e}")
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
     try:
@@ -1617,58 +1628,43 @@ def show_calendar():
     )
 
 # ==============================
-# MASTER LOAN LEDGER (REINFORCED)
+# MASTER LOAN LEDGER (FINAL REPAIR)
 # ==============================
 st.markdown("### 🏢 Master Loan Ledger")
 
-if loans_df is None or loans_df.empty:
-    st.info("ℹ️ No loan records found.")
+# 1. Map Borrower Names (Fixes the "String IDs" issue)
+if not borrowers_df.empty and not loans_df.empty:
+    bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
+    loans_df['Borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
 else:
-    # 1. Prepare clean display data
-    ledger_df = loans_df.copy()
-    
-    # Map Names
-    if borrowers_df is not None and not borrowers_df.empty:
-        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
-        ledger_df['Borrower'] = ledger_df['borrower_id'].map(bor_map).fillna("Unknown")
-    else:
-        ledger_df['Borrower'] = "No Borrower Data"
+    loans_df['Borrower'] = "No Data"
 
-    # Standardize Fields
-    ledger_df['Loan ID'] = ledger_df['loan_id_label'].astype(str)
-    ledger_df['Amount'] = pd.to_numeric(ledger_df['principal'], errors='coerce').fillna(0)
-    ledger_df['Due Date'] = pd.to_datetime(ledger_df['end_date'], errors='coerce')
-    ledger_df['status'] = ledger_df['status'].str.upper()
+# 2. Status Color Logic
+def style_ledger(row):
+    status = str(row.get("status", "")).upper()
+    colors = {"ACTIVE": "#4A90E2", "ROLLED": "#7B1FA2", "OVERDUE": "#D32F2F", "CLOSED": "#2E7D32"}
+    bg = colors.get(status, "#9E9E9E")
+    styles = [''] * len(row)
+    if "status" in row.index:
+        idx = row.index.get_loc("status")
+        styles[idx] = f'background-color: {bg}; color: white; font-weight: bold; border-radius: 4px;'
+    return styles
 
-    # 2. STATUS STYLING (Internal badge logic)
-    def style_ledger(row):
-        status = str(row.get("status", ""))
-        colors = {
-            "ACTIVE": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
-            "ROLLED": "#7B1FA2", "BCF": "#FFA500", "PENDING": "#FBC02D"
-        }
-        bg = colors.get(status, "#9E9E9E")
-        styles = [''] * len(row)
-        if "status" in row.index:
-            idx = row.index.get_loc("status")
-            styles[idx] = f'background-color: {bg}; color: white; font-weight: bold; border-radius: 4px; text-align: center;'
-        return styles
+# 3. Clean View with Fixed Widths (The "Making Sense" Part)
+view_cols = ["loan_id_label", "Borrower", "principal", "end_date", "status"]
 
-    # 3. RENDER WITH COLUMN CONFIG (Fixes the "Empty Space" problem)
-    display_cols = ["Loan ID", "Borrower", "Amount", "Due Date", "status"]
-    
-    st.dataframe(
-        ledger_df[display_cols].style.apply(style_ledger, axis=1),
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Loan ID": st.column_config.TextColumn("ID", width="small"),
-            "Borrower": st.column_config.TextColumn("Borrower Name", width="large"),
-            "Amount": st.column_config.NumberColumn("Amount", format="%d UGX", width="medium"),
-            "Due Date": st.column_config.DateColumn("Due Date", format="YYYY-MM-DD", width="medium"),
-            "status": st.column_config.TextColumn("Status", width="small"),
-        }
-    )
+st.dataframe(
+    loans_df[view_cols].style.apply(style_ledger, axis=1),
+    use_container_width=True,
+    hide_index=True,
+    column_config={
+        "loan_id_label": st.column_config.TextColumn("ID", width="small"),
+        "Borrower": st.column_config.TextColumn("Borrower Name", width="large"),
+        "principal": st.column_config.NumberColumn("Amount", format="%d UGX", width="medium"),
+        "end_date": st.column_config.DateColumn("Due Date", width="medium"),
+        "status": st.column_config.TextColumn("Status", width="small"),
+    }
+)
 
     # 4. Cleanup Warnings
     today = datetime.now().date()
