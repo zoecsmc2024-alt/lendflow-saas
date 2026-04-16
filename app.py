@@ -210,7 +210,7 @@ def save_data(table_name, dataframe):
 # ==============================
 # 6. AUTH CORE (UNIFIED - NO LOSS)
 # ==============================
-def authenticate(supabase_client, company_code, email, password):
+def authenticate(supabase, company_code, email, password):
     try:
         # Step 1: Auth with Supabase Identity
         res = supabase_client.auth.sign_in_with_password({
@@ -355,11 +355,13 @@ def create_session(result, remember_me=False):
 # 🔒 AUTH UI WRAPPER & ROUTER
 # ==============================
 def run_auth_ui(supabase):
-    # Initialize session states
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
-    if "view" not in st.session_state:
-        st.session_state["view"] = "login"
+
+    if not st.session_state["authenticated"]:
+        login_page(supabase)   # ✅ PASS IT HERE
+    else:
+        st.success("Welcome to the dashboard 🚀")
 
     # 1. Check Authentication Status
     if st.session_state["authenticated"]:
