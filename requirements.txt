@@ -7,3 +7,4 @@ bcrypt
 twilio
 fpdf2
 streamlit-calendar
+reportlab
