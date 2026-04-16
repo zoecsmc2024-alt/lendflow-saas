@@ -2296,8 +2296,115 @@ def show_ledger():
         )
 
     # ==============================
-    # PRINTABLE STATEMENT (HTML/PDF PREVIEW)
-    # ==============================
+# 21. STATEMENT PRINT
+# ==============================
+
+import pandas as pd
+import streamlit as st
+from datetime import datetime
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
+
+# ==============================
+# PDF GENERATION BACKEND
+# ==============================
+def generate_pdf_statement(client_name, loans_df, payments_df):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # HEADER
+    elements.append(Paragraph(f"<b>{st.session_state.get('company_name', 'ZOE CONSULTS').upper()}</b>", styles["Title"]))
+    elements.append(Paragraph(f"Client: {client_name}", styles["Normal"]))
+    elements.append(Paragraph(f"Statement Date: {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
+    elements.append(Spacer(1, 20))
+
+    grand_total = 0
+
+    # LOOP THROUGH LOANS
+    for _, loan in loans_df.iterrows():
+        loan_id = str(loan["id"])
+        principal = float(loan.get("principal", 0))
+        interest = float(loan.get("interest", 0))
+        initial_amount = principal + interest
+
+        # Filter payments
+        loan_payments = pd.DataFrame()
+        if payments_df is not None and not payments_df.empty:
+            loan_payments = payments_df[
+                payments_df["loan_id"].astype(str) == loan_id
+            ].copy()
+
+        if not loan_payments.empty:
+            date_col = "payment_date" if "payment_date" in loan_payments.columns else loan_payments.columns[0]
+            loan_payments = loan_payments.sort_values(by=date_col)
+
+        balance = initial_amount
+
+        elements.append(Paragraph(f"<b>Loan ID:</b> {loan_id}", styles["Heading3"]))
+
+        # TABLE DATA
+        data = [["Date", "Description", "Debit", "Credit", "Balance"]]
+
+        # Disbursement
+        data.append([
+            str(loan.get("created_at", loan.get("start_date", ""))),
+            "Loan Disbursement",
+            f"{initial_amount:,.0f}",
+            "0",
+            f"{balance:,.0f}"
+        ])
+
+        # Payments
+        if not loan_payments.empty:
+            for _, p in loan_payments.iterrows():
+                amount = float(p.get("amount", 0))
+                balance -= amount
+                data.append([
+                    str(p.get("payment_date", p.get("date", ""))),
+                    "Repayment",
+                    "0",
+                    f"{amount:,.0f}",
+                    f"{balance:,.0f}"
+                ])
+        else:
+            data.append(["-", "No payments", "-", "-", f"{balance:,.0f}"])
+
+        grand_total += balance
+
+        # TABLE STYLE
+        table = Table(data, repeatRows=1, colWidths=[80, 160, 70, 70, 80])
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+        ]))
+
+        elements.append(table)
+        elements.append(Spacer(1, 20))
+
+    # TOTAL SECTION
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph(f"<b>Total Outstanding: {grand_total:,.0f} UGX</b>", styles["Title"]))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+# ==============================
+# STREAMLIT UI PREVIEW & DOWNLOAD
+# ==============================
+def show_ledger():
+    # ... [Assuming data loading loans_df and payments_df happens here] ...
+
     st.markdown("---")
 
     if st.button("✨ Preview Consolidated Statement", use_container_width=True):
@@ -2332,40 +2439,28 @@ def show_ledger():
         """
 
         grand_total = 0.0
-
-        # Filter all loans for this specific borrower to provide a consolidated view
         client_loans = loans_df[loans_df["borrower"] == current_b_name]
 
         for _, l_row in client_loans.iterrows():
             l_id = l_row['id']
-
             principal = float(l_row.get('principal', 0))
             interest = float(l_row.get('interest', 0))
             initial_amount = principal + interest
 
             loan_payments = pd.DataFrame()
-
             if payments_df is not None and not payments_df.empty:
-                loan_payments = payments_df[
-                    payments_df["loan_id"].astype(str) == str(l_id)
-                ].copy()
+                loan_payments = payments_df[payments_df["loan_id"].astype(str) == str(l_id)].copy()
 
             total_paid = loan_payments["amount"].sum() if not loan_payments.empty else 0
             balance = initial_amount - total_paid
             grand_total += balance
 
-            # ======================
-            # LOAN HEADER
-            # ======================
             html_statement += f"""
             <div style="margin-top: 20px; padding: 12px; background: {baby_blue}; border-left: 4px solid {navy_blue}; font-weight: bold; color: {navy_blue};">
                 LOAN ID: #{l_id} | INITIAL: {initial_amount:,.0f} UGX | PAID: {total_paid:,.0f} UGX | BALANCE: {balance:,.0f} UGX
             </div>
             """
 
-            # ======================
-            # PAYMENT TABLE
-            # ======================
             if not loan_payments.empty:
                 html_statement += """
                 <table style="width:100%; border-collapse: collapse; margin-top:10px;">
@@ -2374,23 +2469,14 @@ def show_ledger():
                         <th style="padding:8px; border:1px solid #ddd;">Amount Paid</th>
                     </tr>
                 """
-
                 for _, p_row in loan_payments.iterrows():
                     pay_date = p_row.get("payment_date", "")
                     amount = float(p_row.get("amount", 0))
-
-                    html_statement += f"""
-                    <tr>
-                        <td style="padding:8px; border:1px solid #ddd;">{pay_date}</td>
-                        <td style="padding:8px; border:1px solid #ddd;">{amount:,.0f} UGX</td>
-                    </tr>
-                    """
-
+                    html_statement += f"<tr><td style='padding:8px; border:1px solid #ddd;'>{pay_date}</td><td style='padding:8px; border:1px solid #ddd;'>{amount:,.0f} UGX</td></tr>"
                 html_statement += "</table>"
             else:
                 html_statement += "<p style='color:red; padding: 5px;'>No payments made on this loan</p>"
 
-        # Closing elements after the loop finishes
         html_statement += f"""
             <div style="margin-top: 40px; padding: 25px; border: 2px solid {navy_blue}; text-align: right; background: #f8faff; border-radius: 8px;">
                 <h2 style="color: {navy_blue}; margin: 0; font-size: 16px;">TOTAL CONSOLIDATED OUTSTANDING</h2>
@@ -2400,8 +2486,24 @@ def show_ledger():
                 Generated by Zoe Finance Core • This is a computer-generated document.
             </div>
         </div>"""
-
         st.components.v1.html(html_statement, height=600, scrolling=True)
+
+    # DOWNLOAD LOGIC
+    if st.button("📄 Download Premium Statement", use_container_width=True):
+        current_b_name = loan_info.get("borrower", "Unknown")
+        client_loans = loans_df[loans_df["borrower"] == current_b_name]
+
+        if not client_loans.empty:
+            pdf_file = generate_pdf_statement(client_name=current_b_name, loans_df=client_loans, payments_df=payments_df)
+            st.download_button(
+                label="⬇️ Click here to Download PDF",
+                data=pdf_file,
+                file_name=f"{current_b_name.replace(' ', '_')}_statement.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        else:
+            st.error("No loan data found for this client.")
 # ==============================
 # 22. SETTINGS & BRANDING (SAAS CONTROL CENTER)
 # ==============================
