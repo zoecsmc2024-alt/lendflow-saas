@@ -326,24 +326,27 @@ def tenant_filter(df):
 
 import streamlit as st
 from supabase import create_client
+import os
 
 # ==============================
 # 🔌 SUPABASE INIT (MUST BE FIRST)
 # ==============================
-import os
-
 SUPABASE_URL = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("🚨 Supabase credentials not configured")
     st.stop()
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 # ==============================
 # 🔐 SESSION HANDLER
 # ==============================
 def create_session(result, remember_me=False):
     st.session_state["user"] = result.get("user")
     st.session_state["authenticated"] = True
+    st.session_state["view"] = "dashboard"
 
     if remember_me:
         st.session_state["remember"] = True
@@ -358,33 +361,35 @@ def run_auth_ui(supabase):
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
-    if not st.session_state["authenticated"]:
-        login_page(supabase)   # ✅ PASS IT HERE
-    else:
-        st.success("Welcome to the dashboard 🚀")
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
 
-    # 1. Check Authentication Status
+    # ✅ AUTHENTICATED FLOW
     if st.session_state["authenticated"]:
         st.success("Welcome to the dashboard 🚀")
-        if st.button("Log Out"):
-            st.session_state["authenticated"] = False
-            st.rerun()
-        return # 👉 Your main app dashboard code would be called here
 
-    # 2. Routing Logic for Unauthenticated Users
-    if st.session_state.view == "login":
+        if st.button("Log Out", key="logout_btn"):
+            st.session_state.clear()
+            st.rerun()
+
+        return  # 👉 your main app goes here
+
+    # ✅ ROUTING FOR NON-AUTH USERS
+    if st.session_state["view"] == "login":
         login_page(supabase)
-    elif st.session_state.view == "signup":
-        # Ensure you have a signup_page function defined
-        st.markdown("### 🆕 Sign Up Page") 
-        if st.button("Back to Login"):
-            st.session_state.view = "login"
+
+    elif st.session_state["view"] == "signup":
+        st.markdown("### 🆕 Sign Up Page")
+        if st.button("Back to Login", key="back_login_signup"):
+            st.session_state["view"] = "login"
             st.rerun()
-    elif st.session_state.view == "forgot_password":
+
+    elif st.session_state["view"] == "forgot_password":
         st.markdown("### 🔑 Reset Password")
-        if st.button("Back to Login"):
-            st.session_state.view = "login"
+        if st.button("Back to Login", key="back_login_forgot"):
+            st.session_state["view"] = "login"
             st.rerun()
+
 # ==============================
 # 🔑 LOGIN PAGE
 # ==============================
@@ -395,23 +400,25 @@ def login_page(supabase):
         st.image("https://via.placeholder.com/150", width=100)
         st.markdown("## 🔐 Finance Portal Login")
 
-        company = st.text_input("Company Code").strip().upper()
-        email = st.text_input("Email").strip().lower()
-        password = st.text_input("Password", type="password")
+        company = st.text_input("Company Code", key="login_company").strip().upper()
+        email = st.text_input("Email", key="login_email").strip().lower()
+        password = st.text_input("Password", type="password", key="login_password")
 
         remember_me = st.checkbox("Remember Me", key="login_remember")
 
-        if st.button("Access Dashboard", use_container_width=True):
+        if st.button("Access Dashboard", use_container_width=True, key="login_btn"):
             if not company or not email or not password:
                 st.error("Please fill in all fields")
                 return
 
             try:
                 result = authenticate(supabase, company, email, password)
+
                 if result.get("success"):
                     create_session(result, remember_me)
                 else:
                     st.error(result.get("error", "Login failed"))
+
             except Exception as e:
                 st.error(f"Login system error: {e}")
 
@@ -420,13 +427,13 @@ def login_page(supabase):
         col1, col2 = st.columns(2)
 
         with col1:
-            if st.button("🆕 Create Account", use_container_width=True):
-                st.session_state.view = "signup"
+            if st.button("🆕 Create Account", use_container_width=True, key="nav_signup"):
+                st.session_state["view"] = "signup"
                 st.rerun()
 
         with col2:
-            if st.button("🔑 Forgot Password?", use_container_width=True):
-                st.session_state.view = "forgot_password"
+            if st.button("🔑 Forgot Password?", use_container_width=True, key="nav_forgot"):
+                st.session_state["view"] = "forgot_password"
                 st.rerun()
 
 # ==============================
@@ -434,8 +441,6 @@ def login_page(supabase):
 # ==============================
 def authenticate(supabase, company, email, password):
     try:
-        # In a true multi-tenant setup, you'd verify the 'company' code here
-        # against a 'tenants' table before attempting auth.
         response = supabase.auth.sign_in_with_password({
             "email": email,
             "password": password
@@ -457,20 +462,6 @@ def authenticate(supabase, company, email, password):
 # ==============================
 if __name__ == "__main__":
     run_auth_ui(supabase)
-
-
-# ==============================
-# 12. ROUTER
-# ==============================
-def run_auth_ui():
-    if "view" not in st.session_state:
-        st.session_state.view = "login"
-
-    if not st.session_state.get("logged_in"):
-        login_page()
-    else:
-        # This will be handled by your main view logic
-        pass
 
 
 def render_sidebar():
