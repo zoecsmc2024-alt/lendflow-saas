@@ -77,21 +77,6 @@ def apply_master_theme():
     """, unsafe_allow_html=True)
 
 
-# ==============================
-# 2. SUPABASE INIT (SINGLE SOURCE OF TRUTH)
-# ==============================
-@st.cache_resource
-def init_supabase():
-    try:
-        url = st.secrets["supabase_url"]
-        key = st.secrets["supabase_key"]
-        return create_client(url, key)
-    except Exception as e:
-        st.error(f"Supabase connection credentials missing or invalid: {e}")
-        st.stop()
-
-supabase = init_supabase()
-
 
 # ==============================
 # 3. MULTI-TENANT SESSION CORE
