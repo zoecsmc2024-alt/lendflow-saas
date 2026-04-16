@@ -324,52 +324,136 @@ def tenant_filter(df):
     return df[df["tenant_id"] == get_tenant_id()].copy()
 
 
+import streamlit as st
+from supabase import create_client
+
 # ==============================
-# 11. LOGIN PAGE (INTEGRATED)
+# 🔌 SUPABASE INIT (MUST BE FIRST)
 # ==============================
-def login_page():
-    # Centered layout for login
+# Ensure these are set in your .streamlit/secrets.toml
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ==============================
+# 🔐 SESSION HANDLER
+# ==============================
+def create_session(result, remember_me=False):
+    st.session_state["user"] = result.get("user")
+    st.session_state["authenticated"] = True
+
+    if remember_me:
+        st.session_state["remember"] = True
+
+    st.success("Login successful")
+    st.rerun()
+
+# ==============================
+# 🔒 AUTH UI WRAPPER & ROUTER
+# ==============================
+def run_auth_ui(supabase):
+    # Initialize session states
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
+
+    # 1. Check Authentication Status
+    if st.session_state["authenticated"]:
+        st.success("Welcome to the dashboard 🚀")
+        if st.button("Log Out"):
+            st.session_state["authenticated"] = False
+            st.rerun()
+        return # 👉 Your main app dashboard code would be called here
+
+    # 2. Routing Logic for Unauthenticated Users
+    if st.session_state.view == "login":
+        login_page(supabase)
+    elif st.session_state.view == "signup":
+        # Ensure you have a signup_page function defined
+        st.markdown("### 🆕 Sign Up Page") 
+        if st.button("Back to Login"):
+            st.session_state.view = "login"
+            st.rerun()
+    elif st.session_state.view == "forgot_password":
+        st.markdown("### 🔑 Reset Password")
+        if st.button("Back to Login"):
+            st.session_state.view = "login"
+            st.rerun()
+
+# ==============================
+# 🔑 LOGIN PAGE
+# ==============================
+def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
 
     with col:
-        st.image("https://via.placeholder.com/150", width=100) 
+        st.image("https://via.placeholder.com/150", width=100)
         st.markdown("## 🔐 Finance Portal Login")
 
-        company = st.text_input("Company Code", help="Provided by your administrator").strip().upper()
+        company = st.text_input("Company Code").strip().upper()
         email = st.text_input("Email").strip().lower()
         password = st.text_input("Password", type="password")
-        
-        # 1. REMEMBER ME WIDGET
+
         remember_me = st.checkbox("Remember Me", key="login_remember")
 
         if st.button("Access Dashboard", use_container_width=True):
             if not company or not email or not password:
                 st.error("Please fill in all fields")
-            elif not check_rate_limit(email):
-                st.error(f"Too many failed attempts. Try again in {LOCKOUT_MINUTES} minutes.")
-            else:
+                return
+
+            try:
                 result = authenticate(supabase, company, email, password)
-
-                if result["success"]:
-                    # Session helper handles the 'remember_me' logic
-                    create_session(result)
+                if result.get("success"):
+                    create_session(result, remember_me)
                 else:
-                    record_failed_attempt(email)
-                    st.error(result["error"])
+                    st.error(result.get("error", "Login failed"))
+            except Exception as e:
+                st.error(f"Login system error: {e}")
 
-        # 2. NAVIGATION LINKS (Sign Up & Forgot Password)
+        # Navigation
         st.markdown("---")
-        nav_col1, nav_col2 = st.columns(2)
-        
-        with nav_col1:
-            if st.button("🆕 Create Account", use_container_width=True, key="nav_signup"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🆕 Create Account", use_container_width=True):
                 st.session_state.view = "signup"
                 st.rerun()
-                
-        with nav_col2:
-            if st.button("🔑 Forgot Password?", use_container_width=True, key="nav_forgot"):
+
+        with col2:
+            if st.button("🔑 Forgot Password?", use_container_width=True):
                 st.session_state.view = "forgot_password"
                 st.rerun()
+
+# ==============================
+# 🔐 AUTH FUNCTION
+# ==============================
+def authenticate(supabase, company, email, password):
+    try:
+        # In a true multi-tenant setup, you'd verify the 'company' code here
+        # against a 'tenants' table before attempting auth.
+        response = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+
+        if response.user:
+            return {
+                "success": True,
+                "user": response.user
+            }
+
+        return {"success": False, "error": "Invalid login credentials"}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ==============================
+# 🚀 APP ENTRY POINT
+# ==============================
+if __name__ == "__main__":
+    run_auth_ui(supabase)
 
 
 # ==============================
