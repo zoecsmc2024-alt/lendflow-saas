@@ -385,7 +385,6 @@ def run_auth_ui(supabase):
         if st.button("Back to Login"):
             st.session_state.view = "login"
             st.rerun()
-
 # ==============================
 # 🔑 LOGIN PAGE
 # ==============================
