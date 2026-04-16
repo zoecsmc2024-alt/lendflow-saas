@@ -81,8 +81,7 @@ def apply_master_theme():
 # ==============================
 @st.cache_resource
 def init_supabase():
-
-supabase = init_supabase()
+    supabase = init_supabase()
 
 
 
