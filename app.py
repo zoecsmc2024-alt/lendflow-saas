@@ -339,8 +339,8 @@ def login_page():
         email = st.text_input("Email").strip().lower()
         password = st.text_input("Password", type="password")
         
-        # --- NEW: REMEMBER ME ---
-        remember_me = st.checkbox("Remember Me")
+        # 1. REMEMBER ME WIDGET
+        remember_me = st.checkbox("Remember Me", key="login_remember")
 
         if st.button("Access Dashboard", use_container_width=True):
             if not company or not email or not password:
@@ -351,23 +351,23 @@ def login_page():
                 result = authenticate(supabase, company, email, password)
 
                 if result["success"]:
-                    # If remember_me is logic is implemented in your session helper
+                    # Session helper handles the 'remember_me' logic
                     create_session(result)
                 else:
                     record_failed_attempt(email)
                     st.error(result["error"])
 
-        # --- NEW: NAVIGATION LINKS ---
+        # 2. NAVIGATION LINKS (Sign Up & Forgot Password)
         st.markdown("---")
         nav_col1, nav_col2 = st.columns(2)
         
         with nav_col1:
-            if st.button("🆕 Create Account", use_container_width=True, key="go_signup"):
+            if st.button("🆕 Create Account", use_container_width=True, key="nav_signup"):
                 st.session_state.view = "signup"
                 st.rerun()
                 
         with nav_col2:
-            if st.button("🔑 Forgot Password?", use_container_width=True, key="go_forgot"):
+            if st.button("🔑 Forgot Password?", use_container_width=True, key="nav_forgot"):
                 st.session_state.view = "forgot_password"
                 st.rerun()
 
