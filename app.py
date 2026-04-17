@@ -2676,6 +2676,22 @@ def show_payroll():
     # ==============================
     df = get_cached_data("payroll")
 
+    # Standardize column names to prevent "History" tab from going blank
+    if df is not None and not df.empty:
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+        
+        # Mapping common Supabase variations to match your required_keys logic
+        rename_map = {
+            "employee_name": "employee",
+            "name": "employee",
+            "salary_basic": "basic_salary",
+            "absenteeism_deduction": "absent_deduction",
+            "advance_salary": "advance_drs",
+            "tin_no": "tin",
+            "mobile_no": "mob_no"
+        }
+        df = df.rename(columns=rename_map)
+
     required_keys = [
         "id","employee","tin","designation","mob_no","account_no","nssf_no",
         "arrears","basic_salary","absent_deduction","lst","gross_salary",
@@ -2691,8 +2707,6 @@ def show_payroll():
         df = df[df["tenant_id"].astype(str) == str(current_tenant)]
     else:
         df["tenant_id"] = current_tenant
-
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     # ==============================
     # CALC ENGINE (UGANDAN TAX COMPLIANCE)
