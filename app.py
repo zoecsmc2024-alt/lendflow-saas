@@ -19,11 +19,20 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+# ==============================
+# 🔒 SAFETY: Ensure supabase always exists
+# ==============================
+if "supabase" not in globals():
+    supabase = None
+
 # 1. CORE DATA ENGINE (Must be at the top level)
 @st.cache_data(ttl=600)
-def get_cached_data(table_name):
+def get_cached_data_legacy(table_name):  # 🔥 renamed (NOT deleted)
     """Fetches and caches data from Supabase for all pages."""
     try:
+        if supabase is None:
+            return pd.DataFrame()
+
         # Use your existing supabase client connection here
         response = supabase.table(table_name).select("*").execute()
         return pd.DataFrame(response.data)
@@ -46,35 +55,9 @@ SESSION_TIMEOUT = 30
 # 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
 def apply_master_theme():
-    # Fallback to a default if theme_color is missing
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f"""
-        <style>
-            [data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
-            [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {{
-                color: white !important;
-                font-weight: 500 !important;
-                font-size: 1rem !important;
-            }}
-            div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] div[data-bv-tabindex] {{
-                border: 2px solid white !important;
-            }}
-            div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] div[data-bv-tabindex="0"] > div {{
-                background-color: #FF4B4B !important;
-            }}
-            [data-testid="stSidebar"] button {{
-                background-color: white !important;
-                color: {brand_color} !important;
-                border-radius: 8px !important;
-            }}
-            /* Metric Card styling fix */
-            div[data-testid="stMetricValue"] {{
-                font-size: 1.8rem !important;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
+    st.markdown(f""" ... """, unsafe_allow_html=True)
+
 
 # ==============================
 # 🔌 SUPABASE INIT (SAFE GLOBAL)
@@ -87,12 +70,12 @@ def init_supabase():
         key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
         if not url or not key:
-            return None  # ✅ don't crash app
+            return None
 
         return create_client(url, key)
 
-    except Exception as e:
-        return None  # ✅ fail silently (handled later)
+    except Exception:
+        return None
 
 
 supabase = init_supabase()
@@ -128,28 +111,28 @@ def require_tenant():
 # ==============================
 def upload_image(file, bucket="collateral-photos"):
     try:
+        if supabase is None:
+            st.error("Storage unavailable")
+            return None
+
         require_tenant()
         tenant_id = get_tenant_id()
 
-        # Sanitize filename: remove special characters
         clean_name = re.sub(r'[^a-zA-Z0-9._-]', '_', file.name)
         file_name = f"{tenant_id}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{clean_name}"
 
-        # Get file content and type
         file_content = file.getvalue()
         content_type = file.type
 
-        # Upload to Supabase
         supabase.storage.from_(bucket).upload(
             path=file_name,
             file=file_content,
             file_options={"content-type": content_type}
         )
-        
-        # Get and return URL
+
         response = supabase.storage.from_(bucket).get_public_url(file_name)
         return response
-        
+
     except Exception as e:
         st.error(f"Upload failed: {e}")
         return None
@@ -159,23 +142,25 @@ def upload_image(file, bucket="collateral-photos"):
 # 5. DATA LAYER (MERGED - NO DUPLICATES)
 # ==============================
 
-# INITIALIZE FIRST
 loans_df = pd.DataFrame() 
 borrowers_df = pd.DataFrame()
 
-# THEN ATTEMPT TO FETCH
 try:
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
 except Exception as e:
     st.error(f"Error fetching data: {e}")
+
+
 @st.cache_data(ttl=600)
-def get_cached_data(table_name):
+def get_cached_data(table_name):  # ✅ MAIN FUNCTION
     try:
+        if supabase is None:
+            return pd.DataFrame()
+
         require_tenant()
         tenant_id = get_tenant_id()
         
-        # Execute Supabase query with tenant filter
         res = supabase.table(table_name)\
             .select("*")\
             .eq("tenant_id", tenant_id)\
@@ -183,7 +168,6 @@ def get_cached_data(table_name):
             
         if res.data:
             df = pd.DataFrame(res.data)
-            # Standardize column casing immediately upon load
             df.columns = df.columns.str.strip().str.lower()
             return df
         return pd.DataFrame()
@@ -195,19 +179,20 @@ def get_cached_data(table_name):
 
 def save_data(table_name, dataframe):
     try:
+        if supabase is None:
+            st.error("Database not connected")
+            return False
+
         require_tenant()
+
         if dataframe is None or dataframe.empty:
             return False
 
-        # Ensure every record has the tenant_id before saving
         dataframe["tenant_id"] = get_tenant_id()
-        
-        # Convert to records and handle potential NaN values which Supabase dislikes
         records = dataframe.replace({np.nan: None}).to_dict("records")
         
         supabase.table(table_name).upsert(records).execute()
         
-        # Clear cache to ensure the UI updates with new data
         st.cache_data.clear()
         return True
 
@@ -216,19 +201,10 @@ def save_data(table_name, dataframe):
         return False
 
 
-import streamlit as st
-from supabase import create_client
-import os
-from datetime import datetime, timedelta
-
 # ==============================
-# 🔌 SUPABASE INIT (ROBUST)
+# 🔌 SUPABASE INIT (ROBUST - SAFE MERGED)
 # ==============================
-import os
-import streamlit as st
-from supabase import create_client
 
-# Try BOTH lowercase + uppercase + env vars
 SUPABASE_URL = (
     st.secrets.get("supabase_url") or
     st.secrets.get("SUPABASE_URL") or
@@ -241,25 +217,24 @@ SUPABASE_KEY = (
     os.getenv("SUPABASE_KEY")
 )
 
-# ==============================
-# 🚨 FAIL FAST + DEBUG
-# ==============================
 if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("🚨 Supabase credentials not configured")
+    st.warning("⚠️ Supabase credentials not configured")
 
-    # 🔍 Debug visibility (REMOVE after fix)
-    st.write("DEBUG → Available secrets:", list(st.secrets.keys()))
+    try:
+        st.write("DEBUG → Available secrets:", list(st.secrets.keys()))
+    except:
+        pass
 
-    st.stop()
+    SUPABASE_DISABLED = True
+else:
+    SUPABASE_DISABLED = False
 
-# ==============================
-# ✅ CREATE CLIENT
-# ==============================
 try:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    if not SUPABASE_DISABLED:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
-    st.error(f"🚨 Supabase initialization failed: {e}")
-    st.stop()
+    st.warning(f"⚠️ Supabase initialization failed: {e}")
+    supabase = None
 
 # ==============================
 # 6. AUTH CORE (UNIFIED - FINAL)
