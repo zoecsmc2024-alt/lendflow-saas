@@ -762,28 +762,31 @@ def show_borrowers():
         st.stop()
 
     # ==============================
-    # 🧠 SAFE HELPERS
+    # 🧠 SAFE HELPERS (CORRECTLY NESTED)
     # ==============================
     def safe_df(df):
+        """Ensures we always have a DataFrame object to avoid 'NoneType' errors."""
         return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
     def safe_numeric(df, col, default=0.0):
+        """Standardizes columns to numeric Series, handling missing data safely."""
+        # Check if the input is valid
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return pd.Series(dtype="float64")
 
-    # Always return a Series (NEVER scalar)
-    if not isinstance(df, pd.DataFrame) or df.empty:
-        return pd.Series(dtype="float64")
+        # Process the column or create a default series
+        if col in df.columns:
+            s = pd.to_numeric(df[col], errors="coerce")
+        else:
+            s = pd.Series([default] * len(df), index=df.index)
 
-    if col in df.columns:
-        s = pd.to_numeric(df[col], errors="coerce")
-    else:
-        s = pd.Series([default] * len(df), index=df.index)
-
-    return s.fillna(default)
+        return s.fillna(default)
 
     def force_series(x, length=0, default=0):
-    if isinstance(x, pd.Series):
-        return x
-    return pd.Series([default]*length)
+        """Guarantees a pandas Series output regardless of input type."""
+        if isinstance(x, pd.Series):
+            return x
+        return pd.Series([default] * length)
 
     # ==============================
     # 📥 LOAD DATA
