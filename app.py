@@ -2132,17 +2132,28 @@ def show_overdue_tracker():
     # 📥 FETCH DATA (SAFE)
     # ==============================
     try:
-        loans_raw = get_cached_data("loans")
+        # CRITICAL: Ensure this function is defined above this block!
+        # If using a custom function, ensure it exists. 
+        # If using standard Supabase/SQL, it might be 'get_data()'
+        loans_raw = get_cached_data("loans") 
+    except NameError:
+        st.error("Function 'get_cached_data' is not defined. Please check your function names.")
+        return
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return
 
+    # Properly indented block
     if loans_raw is None:
-    st.warning("No loan data available.")
-    return
+        st.warning("No loan data available.")
+        return
 
     # Convert safely
-    loans_df = pd.DataFrame(loans_raw)
+    try:
+        loans_df = pd.DataFrame(loans_raw)
+    except Exception as e:
+        st.error(f"Failed to convert data to table: {e}")
+        return
 
     if loans_df.empty:
         st.warning("No loan data available.")
