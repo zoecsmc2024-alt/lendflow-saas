@@ -54,141 +54,89 @@ SESSION_TIMEOUT = 30
 # ==============================
 # 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
+# ==============================
+# 1. THEME ENGINE (ENTERPRISE SAFE)
+# ==============================
 def apply_master_theme():
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
 
     st.markdown(f"""
     <style>
-
-    /* ==============================
-       GLOBAL FONT + SMOOTHING
-    ============================== */
-    html, body, [class*="css"] {{
-        font-family: 'Source Sans Pro', sans-serif;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }}
-
-    /* ==============================
-       SIDEBAR BACKGROUND (GRADIENT + DEPTH)
-    ============================== */
-    [data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, {brand_color} 0%, #0F172A 100%) !important;
-        border-right: 1px solid rgba(255,255,255,0.05);
-    }}
-
-    /* REMOVE TOP GAP */
-    [data-testid="stSidebar"] > div:first-child {{
-        padding-top: 0rem;
-    }}
-
-    /* ==============================
-       SELECTBOX (CLEAN WHITE GLASS)
-    ============================== */
+    /* SELECTBOX FIX */
     div[data-baseweb="select"] > div {{
-        background: rgba(255,255,255,0.95) !important;
+        background: rgba(255,255,255,0.9) !important;
         border-radius: 12px !important;
         border: none !important;
         font-weight: 500;
-        color: #111827 !important;
     }}
 
-    /* ==============================
-       RADIO GROUP (NAVIGATION)
-    ============================== */
-    div[role="radiogroup"] {{
-        margin-top: 10px;
-    }}
-
-    /* EACH NAV ITEM */
+    /* 🔥 FIX NAV TEXT VISIBILITY */
     div[role="radiogroup"] label {{
-        display: block;
-        padding: 10px 12px;
-        border-radius: 10px;
-        margin-bottom: 4px;
-        cursor: pointer;
-        transition: all 0.2s ease;
         color: rgba(255,255,255,0.95) !important;
-        font-weight: 500;
-        opacity: 0.85;
+        font-weight: 500 !important;
     }}
 
-    /* ICON + TEXT FIX */
+    /* 🔥 FIX ICON + TEXT ROW */
     div[role="radiogroup"] label span {{
         color: rgba(255,255,255,0.95) !important;
     }}
 
-    /* HOVER STATE */
+    /* 🔥 INACTIVE ITEMS (slightly dim but visible) */
+    div[role="radiogroup"] label {{
+        opacity: 0.85;
+        padding: 10px !important;
+        border-radius: 10px;
+        transition: 0.2s ease;
+    }}
+
+    /* 🔥 ACTIVE ITEM (FULL BRIGHT + GLOW) */
+    div[role="radiogroup"] input:checked + div {{
+        opacity: 1 !important;
+        color: #ffffff !important;
+        background: rgba(255,255,255,0.18) !important;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    }}
+
+    div[role="radiogroup"] label div {{
+        color: white !important;
+    }}
+
+    /* HOVER */
     div[role="radiogroup"] label:hover {{
         background: rgba(255,255,255,0.08);
-        opacity: 1;
-        transform: translateX(2px);
     }}
 
-    /* ACTIVE (SELECTED) ITEM */
-    div[role="radiogroup"] input:checked + div {{
-        background: rgba(255,255,255,0.18) !important;
-        color: #ffffff !important;
-        border-radius: 10px;
-        box-shadow: 0 0 12px rgba(255,255,255,0.15);
-        opacity: 1 !important;
+    /* SIDEBAR BACKGROUND (GRADIENT) */
+    [data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, {brand_color} 0%, #0F172A 100%) !important;
     }}
 
-    /* FORCE TEXT WHITE IN ACTIVE */
-    div[role="radiogroup"] input:checked + div span {{
-        color: #ffffff !important;
-        font-weight: 600;
+    /* REMOVE DEFAULT PADDING */
+    [data-testid="stSidebar"] > div:first-child {{
+        padding-top: 0rem;
     }}
 
-    /* ==============================
-       DIVIDER LINE (SOFT)
-    ============================== */
-    hr {{
-        border: none;
-        border-top: 1px solid rgba(255,255,255,0.08);
+    /* NAV TEXT */
+    [data-testid="stSidebar"] .stRadio label {{
+        color: white !important;
+        font-size: 15px !important;
+        font-weight: 500 !important;
     }}
 
-    /* ==============================
-       BUTTONS (LOGOUT ETC)
-    ============================== */
+    /* BUTTONS */
     [data-testid="stSidebar"] button {{
-        background: rgba(255,255,255,0.95) !important;
+        background-color: white !important;
         color: {brand_color} !important;
         border-radius: 10px !important;
         font-weight: 600 !important;
-        border: none;
-        transition: all 0.2s ease;
     }}
 
-    [data-testid="stSidebar"] button:hover {{
-        background: white !important;
-        transform: scale(1.02);
+    /* LOGO CIRCLE EFFECT */
+    .logo-container img {{
+        border-radius: 50%;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }}
-
-    /* ==============================
-       IMAGE (LOGO) POLISH
-    ============================== */
-    img {{
-        max-width: 100%;
-        height: auto;
-    }}
-
-    /* ==============================
-       SCROLLBAR (PREMIUM TOUCH)
-    ============================== */
-    ::-webkit-scrollbar {{
-        width: 6px;
-    }}
-
-    ::-webkit-scrollbar-thumb {{
-        background: rgba(255,255,255,0.2);
-        border-radius: 10px;
-    }}
-
-    ::-webkit-scrollbar-track {{
-        background: transparent;
-    }}
-
     </style>
     """, unsafe_allow_html=True)
 
