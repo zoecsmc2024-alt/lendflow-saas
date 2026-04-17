@@ -182,10 +182,15 @@ def get_cached_data(table_name):
         print(f"[DATA ERROR] {table_name}: {e}")  # avoids UI spam
         return []
 def safe_numeric(df, col, default=0.0):
-    if isinstance(df, pd.DataFrame) and col in df.columns:
+
+    # Always return a Series (NEVER scalar)
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return pd.Series(dtype="float64")
+
+    if col in df.columns:
         s = pd.to_numeric(df[col], errors="coerce")
     else:
-        s = pd.Series([default] * len(df))
+        s = pd.Series([default] * len(df), index=df.index)
 
     return s.fillna(default)
 
