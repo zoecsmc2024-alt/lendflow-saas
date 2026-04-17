@@ -715,30 +715,30 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==============================
-    # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
+        # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
+        # ==============================
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+
+        if st.button("🚪 Logout", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                if key not in ["theme_color"]:
+                    del st.session_state[key]
+            try:
+                st.rerun()
+            except:
+                pass
+
     # ==============================
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-
-    if st.button("🚪 Logout", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            if key not in ["theme_color"]:
-                del st.session_state[key]
-        
-        try:
-            st.rerun()
-        except:
-            pass
-
-# ==============================
-# 🎯 PAGE RESOLUTION
-# ==============================
-try:
-    final_page = selection.split(" ", 1)[1]
-except:
-    final_page = "Overview"
+    # 🎯 PAGE RESOLUTION
+    # ==============================
+    try:
+        final_page = selection.split(" ", 1)[1]
+    except:
+        final_page = "Overview"
 
     st.session_state['current_page'] = final_page
-return final_page
+
+    return final_page
         
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE (SAAS + DEBUG FIXED + ENTERPRISE UPGRADE)
