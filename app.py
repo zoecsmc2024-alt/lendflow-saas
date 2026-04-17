@@ -1264,12 +1264,12 @@ def show_loans():
             }
             return color_map.get(val, "")
 
-        # Apply styling to the dataframe
+        # Apply styling to the dataframe - Using .map instead of .applymap
         styled_df = filtered_loans[show_cols].style.format({
             "principal": "{:,.0f}",
             "total_repayable": "{:,.0f}",
             "balance": "{:,.0f}"
-        }).applymap(style_status, subset=["status"])
+        }).map(style_status, subset=["status"])
 
         st.dataframe(
             styled_df,
