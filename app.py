@@ -894,50 +894,52 @@ def show_borrowers():
             filtered_df = df_to_show[mask]
 
             if not filtered_df.empty:
-                rows_html = "" 
-                
-                # --- LOOP 1: ONLY BUILD THE STRING ---
+                rows_html = ""
                 for i, r in filtered_df.reset_index().iterrows():
+                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                     b_id = str(r.get("id", ""))
+                    
+                    # Risk Logic
                     risk = risk_map.get(b_id, {})
                     risk_label = risk.get("risk", "🟢 Healthy")
                     
-                    # (Logic for colors remains the same...)
-                    color = "#dc2626" if "🔴" in risk_label else "#16a34a"
+                    if "🔴" in risk_label: color = "#dc2626"
+                    elif "🟠" in risk_label: color = "#ea580c"
+                    elif "🟡" in risk_label: color = "#f59e0b"
+                    else: color = "#16a34a"
 
-                    # Add to the string variable only
                     rows_html += f"""
-                    <tr>
-                        <td><span class="borrower-name">{r.get('name', 'N/A')}</span></td>
-                        <td>{r.get('phone', 'N/A')}</td>
-                        <td>{r.get('email', 'N/A')}</td>
-                        <td><span class="risk-badge" style="background:{color};">{risk_label}</span></td>
-                        <td style="text-align:center;"><span class="status-badge">{r.get('status', 'Active')}</span></td>
-                    </tr>
-                    """
+                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
+                        <td style="padding:12px;"><b>{r.get('name', 'Unknown')}</b></td>
+                        <td style="padding:12px;">{r.get('phone', 'N/A')}</td>
+                        <td style="padding:12px;">{r.get('email', 'N/A')}</td>
+                        <td style="padding:12px;">
+                            <span style="background:{color}; color:white; padding:3px 8px; border-radius:12px; font-size:11px;">
+                                {risk_label}
+                            </span>
+                        </td>
+                        <td style="padding:12px; text-align:center;">
+                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">
+                                {r.get('status', 'Active')}
+                            </span>
+                        </td>
+                    </tr>"""
 
-                # --- STEP 2: RENDER ONCE (MUST BE OUTSIDE THE LOOP) ---
-                # Check your indentation: This 'st.markdown' must be aligned with 'for'
                 st.markdown(f"""
-                <style>
-                    .borrower-table {{ border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; }}
-                    .borrower-table table {{ width:100%; border-collapse:collapse; font-size:13px; }}
-                    .borrower-table thead tr {{ background:{brand_color}; color:white; }}
-                    .borrower-table th, .borrower-table td {{ padding:12px; text-align: left; }}
-                </style>
-                <div class="borrower-table">
-                    <table>
+                <div style='border:2px solid {brand_color}33; border-radius:10px; overflow:hidden; margin-top:20px;'>
+                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
                         <thead>
-                            <tr>
-                                <th>Borrower</th><th>Phone</th><th>Email</th><th>Risk</th><th style="text-align:center;">Status</th>
+                            <tr style='background:{brand_color}; color:white; text-align:left;'>
+                                <th style='padding:12px;'>Borrower Name</th>
+                                <th style='padding:12px;'>Phone</th>
+                                <th style='padding:12px;'>Email</th>
+                                <th style='padding:12px;'>Risk Status</th>
+                                <th style='padding:12px; text-align:center;'>Status</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {rows_html}
-                        </tbody>
+                        <tbody>{rows_html}</tbody>
                     </table>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
             else:
                 st.info("No borrowers found matching your search.")
         else:
