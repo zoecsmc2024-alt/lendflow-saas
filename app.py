@@ -166,6 +166,23 @@ supabase = init_supabase()
 if supabase is None:
     st.warning("⚠️ Supabase not connected (some features may not work)")
 
+@st.cache_data(ttl=60, show_spinner=False)
+def get_cached_data(table_name):
+    if not table_name:
+        return []
+
+    try:
+        response = supabase.table(table_name).select("*").execute()
+
+        if hasattr(response, "data") and response.data:
+            return response.data
+
+        return []
+
+    except Exception as e:
+        print(f"[DATA ERROR] {table_name}: {e}")  # avoids UI spam
+        return []
+
 
 # ==============================
 # 3. MULTI-TENANT SESSION CORE
