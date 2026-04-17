@@ -18,7 +18,6 @@ import time
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-
 # ==============================
 # 🔒 SAFETY: Ensure supabase always exists
 # ==============================
