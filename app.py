@@ -3599,7 +3599,6 @@ if __name__ == "__main__":
 
             # Sidebar
             page = render_sidebar()
-
             # Theme
             apply_master_theme()
 
