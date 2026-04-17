@@ -1359,15 +1359,54 @@ def show_payments():
         if active_loans.empty:
             st.success("🎉 All loans are currently cleared!")
         else:
-            loan_options = active_loans.apply(
-                lambda x: f"ID: {x['id']} - {x['borrower']}", 
-                axis=1
-            ).tolist()
-            
-            selected_option = st.selectbox("Select Loan to Credit", loan_options, key="pay_sel")
-            
+                        # Ensure ID is string-safe
+            active_loans["id"] = active_loans["id"].astype(str)
+
+            # --- SEARCH BOX (LIVE FILTER) ---
+            search_query = st.text_input(
+                "🔍 Search Borrower / Loan",
+                placeholder="Type name, phone, or loan ref...",
+                key="loan_search"
+            )
+
+            # --- BUILD DISPLAY + SAFE MAP ---
+            def format_option(row):
+                balance = max(0, float(row.get("total_repayable", 0)) - float(row.get("amount_paid", 0)))
+                return f"{row['borrower']}  •  UGX {balance:,.0f}  •  #{str(row['id'])[:6]}"
+
+            # Filter logic (SAFE)
+            if search_query and search_query.strip() != "":
+                filtered_loans = active_loans[
+                    active_loans.apply(
+                        lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
+                        or search_query.lower() in str(r.get("id", "")).lower(),
+                        axis=1
+                    )
+                ]
+            else:
+                filtered_loans = active_loans
+
+            # Prevent empty crash
+            if filtered_loans.empty:
+                st.warning("No matching loans found.")
+                st.stop()
+
+            # Mapping
+            loan_map = {
+                format_option(row): str(row["id"])
+                for _, row in filtered_loans.iterrows()
+            }
+
+            # --- AUTOCOMPLETE-LIKE SELECT ---
+            selected_option = st.selectbox(
+                "Select Loan to Credit",
+                list(loan_map.keys()),
+                key="pay_sel"
+            )
+
+            # --- SAFE ID RESOLUTION ---
             try:
-                raw_id = int(selected_option.split(" - ")[0].replace("ID: ", "").strip())
+                raw_id = loan_map[selected_option]
                 loan = active_loans[active_loans["id"] == raw_id].iloc[0]
             except Exception as e:
                 st.error(f"❌ Error identifying Loan: {e}")
