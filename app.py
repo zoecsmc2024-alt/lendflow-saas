@@ -2816,9 +2816,7 @@ def show_payroll():
     # 📜 PAYROLL TABLE
     # ==============================
     with tab_ledger:
-
         if not df.empty:
-
             def fm(x):
                 try:
                     return f"{int(float(x or 0)):,}"
@@ -2846,7 +2844,7 @@ def show_payroll():
                 font-size:13px;
             }}
             th {{
-                background:{brand_color};
+                background:{brand_color if 'brand_color' in locals() else '#2B3F87'};
                 color:white;
                 padding:10px;
                 text-align:left;
@@ -2876,9 +2874,9 @@ def show_payroll():
                 </tbody>
             </table>
             """, unsafe_allow_html=True)
-
         else:
             st.info("No payroll records yet.")
+
     with tab_logs:
         if not df.empty:
             def fm(x):
