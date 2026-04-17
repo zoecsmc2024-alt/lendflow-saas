@@ -981,25 +981,40 @@ def show_borrowers():
                 email = c1.text_input("Email", borrower["email"])
 
                 # ==============================
-                # 📊 LOANS LINKED (WITH FORMATTING)
+                # 📊 LOANS LINKED (CLEAN VIEW)
                 # ==============================
                 user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy() if not loans_df.empty else pd.DataFrame()
 
                 st.markdown("### 📊 Loan History")
-                
+
                 if not user_loans.empty:
-                    # Formatting: Display with commas using column_config
+                    # We use column_config to hide IDs and format money
                     st.dataframe(
                         user_loans, 
                         use_container_width=True,
+                        hide_index=True, # Removes the leftmost numbers (1, 4, 5)
                         column_config={
-                            "balance": st.column_config.NumberColumn("Balance", format="#,##0.00"),
-                            "amount": st.column_config.NumberColumn("Principal", format="#,##0.00"),
-                            "exposure": st.column_config.NumberColumn("Total Exposure", format="#,##0.00")
+                            # 🙈 HIDE THE "TURN OFF" IDs
+                            "id": None, 
+                            "tenant_id": None,
+                            "borrower_id": None,
+                            
+                            # 🏷️ LABEL THE VISIBLE COLUMNS
+                            "loan_id_label": st.column_config.TextColumn("Loan ID"),
+                            
+                            # 💰 ADD COMMAS TO MONEY
+                            "principal": st.column_config.NumberColumn("Principal", format="#,##0"),
+                            "interest": st.column_config.NumberColumn("Interest", format="#,##0"),
+                            "total_repayable": st.column_config.NumberColumn("Total Due", format="#,##0"),
+                            "amount_paid": st.column_config.NumberColumn("Paid", format="#,##0"),
+                            
+                            # 📅 CLEAN DATES
+                            "start_date": st.column_config.DateColumn("Started"),
+                            "end_date": st.column_config.DateColumn("Due Date"),
                         }
                     )
                     
-                    # PDF / Data Export
+                    # Export Button 
                     csv = user_loans.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="📥 Export Loan Statement (CSV)",
@@ -1007,9 +1022,8 @@ def show_borrowers():
                         file_name=f"Statement_{name.replace(' ', '_')}.csv",
                         mime="text/csv",
                     )
-                    st.caption("Note: For PDF, open the CSV in Excel and 'Save as PDF'.")
                 else:
-                    st.info("No loans found")
+                    st.info("No loans found for this borrower")
 
                 # ==============================
                 # 🛠️ ACTIONS
