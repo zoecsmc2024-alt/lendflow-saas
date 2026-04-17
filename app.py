@@ -531,225 +531,180 @@ def render_sidebar():
 
     current_tenant_id = st.session_state.get('tenant_id')
 
-def render_sidebar(tenant_map, current_tenant_id):
-# ==============================
-# 2. SIDEBAR UI
-# ==============================
-with st.sidebar:
-    st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
-
     # ==============================
-    # TENANT SELECT
+    # 2. SIDEBAR UI
     # ==============================
-    if tenant_map:
-        options = list(tenant_map.keys())
-        default_index = 0
+    with st.sidebar:
+        # Header Padding
+        st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
 
-        if current_tenant_id:
-            for i, name in enumerate(options):
-                if str(tenant_map[name]['id']) == str(current_tenant_id):
-                    default_index = i
-                    break
+        if tenant_map:
+            options = list(tenant_map.keys())
+            default_index = 0
 
-        Active_company_name = st.selectbox(
-            "🏢 Business",
-            options,
-            index=default_index,
-            key="sidebar_portal_select"
-        )
+            if current_tenant_id:
+                for i, name in enumerate(options):
+                    if str(tenant_map[name]['id']) == str(current_tenant_id):
+                        default_index = i
+                        break
 
-        Active_company = tenant_map.get(Active_company_name)
+            Active_company_name = st.selectbox(
+                "🏢 Business",
+                options,
+                index=default_index,
+                key="sidebar_portal_select"
+            )
 
-        # ==============================
-        # 🔁 TENANT SYNC
-        # ==============================
-        if Active_company:
-            if str(st.session_state.get('tenant_id')) != str(Active_company['id']):
-                st.session_state['tenant_id'] = Active_company['id']
-                st.session_state['theme_color'] = Active_company.get('brand_color', '#2B3F87')
-                st.session_state['company'] = Active_company.get('name')
+            Active_company = tenant_map.get(Active_company_name, None)
 
-                st.cache_data.clear()
-                try:
-                    st.rerun()
-                except:
-                    pass
-    else:
-        st.warning("No business entities found.")
-        st.stop()
+            # ==============================
+            # 🔁 TENANT SYNC (INSIDE SIDEBAR)
+            # ==============================
+            if Active_company:
+                if str(st.session_state.get('tenant_id')) != str(Active_company['id']):
+                    st.session_state['tenant_id'] = Active_company['id']
+                    st.session_state['theme_color'] = Active_company.get('brand_color', '#2B3F87')
+                    st.session_state['company'] = Active_company.get('name')
 
-    # ==============================
-    # 💎 PRO BRAND BLOCK
-    # ==============================
-    import time
-
-    logo_val = Active_company.get('logo_url') if Active_company else None
-    final_logo_url = None
-
-    if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
-        if str(logo_val).startswith("http"):
-            final_logo_url = logo_val
+                    st.cache_data.clear()
+                    try:
+                        st.rerun()
+                    except:
+                        pass
         else:
-            try:
-                project_url = st.secrets.get("supabase_url") or st.secrets.get("SUPABASE_URL")
-                project_url = project_url.strip("/")
-                final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
-            except Exception:
-                final_logo_url = None
+            st.sidebar.warning("No business entities found.")
+            st.stop()
 
-    # Logo component
-    if final_logo_url:
-        logo_component = f"""
-        <div style="
-            display:inline-block;
-            padding:12px;
-            border-radius:50%;
-            background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
-            box-shadow: 0 0 25px rgba(255,255,255,0.15);
-        ">
-            <img src="{final_logo_url}?t={int(time.time())}" width="80"
-                 style="border-radius:50%; object-fit:cover;"/>
-        </div>
-        """
-    else:
-        logo_component = "<h1 style='font-size:40px; margin:0;'>🏢</h1>"
+        # ==============================
+        # 💎 PRO BRAND BLOCK (ELITE - SYNCHRONIZED)
+        # ==============================
+        import time
 
-    # Stats
-    total_loans = len(st.session_state.get('loans_df', []))
-    total_clients = len(st.session_state.get('borrowers_df', []))
+        logo_val = Active_company.get('logo_url') if Active_company else None
+        final_logo_url = None
 
-    # Render block
-    st.markdown(f"""
-    <div style="text-align:center; margin-top:20px;">
+        if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
+            if str(logo_val).startswith("http"):
+                final_logo_url = logo_val
+            else:
+                try:
+                    project_url = st.secrets.get("supabase_url") or st.secrets.get("SUPABASE_URL")
+                    project_url = project_url.strip("/")
+                    final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
+                except:
+                    final_logo_url = None
 
-        {logo_component}
-
-        <div style="margin-top:12px;">
-            <h3 style="color:white; margin:0;">
-                {Active_company_name}
-                <span style="
-                    font-size:12px;
-                    background:#22c55e;
-                    color:white;
-                    padding:2px 6px;
-                    border-radius:6px;
-                ">✔</span>
-            </h3>
-        </div>
-
-        <p style="
-            font-size:11px;
-            color:rgba(255,255,255,0.6);
-            letter-spacing:1px;
-            margin-top:4px;
-            text-transform: uppercase;
-            font-weight:600;
-        ">
-            FINANCE CORE SYSTEM
-        </p>
-
-        <div style="
-            display:flex;
-            justify-content:center;
-            gap:10px;
-            margin-top:15px;
-        ">
+        # Logic for creating the logo HTML component
+        if final_logo_url:
+            logo_component = f"""
             <div style="
-                flex:1;
-                background:rgba(255,255,255,0.08);
-                padding:10px 5px;
-                border-radius:12px;
-                color:white;
-                border:1px solid rgba(255,255,255,0.1);
+                display:inline-block;
+                padding:12px;
+                border-radius:50%;
+                background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
+                box-shadow: 0 0 25px rgba(255,255,255,0.15);
             ">
-                <div style="font-size:14px; font-weight:bold;">💵 {total_loans}</div>
-                <div style="font-size:9px; opacity:0.6; font-weight:700;">LOANS</div>
+                <img src="{final_logo_url}?t={int(time.time())}" width="80" style="border-radius:50%; object-fit:cover;"/>
             </div>
+            """
+        else:
+            logo_component = "<h1 style='font-size:40px; margin:0;'>🏢</h1>"
 
-            <div style="
-                flex:1;
-                background:rgba(255,255,255,0.08);
-                padding:10px 5px;
-                border-radius:12px;
-                color:white;
-                border:1px solid rgba(255,255,255,0.1);
+        # Fetch stats safely
+        total_loans = len(st.session_state.get('loans_df', []))
+        total_clients = len(st.session_state.get('borrowers_df', []))
+
+        # Render the entire Elite Brand Block
+        st.markdown(f"""
+        <div style="text-align:center; margin-top:20px;">
+            {logo_component}
+            <div style="margin-top:12px;">
+                <h3 style="color:white; margin:0;">
+                    {Active_company_name}
+                    <span style="
+                        font-size:12px;
+                        background:#22c55e;
+                        color:white;
+                        padding:2px 6px;
+                        border-radius:6px;
+                    ">✔</span>
+                </h3>
+            </div>
+            <p style="
+                font-size:11px;
+                color:rgba(255,255,255,0.6);
+                letter-spacing:1px;
+                margin-top:4px;
+                text-transform: uppercase;
+                font-weight:600;
             ">
-                <div style="font-size:14px; font-weight:bold;">👥 {total_clients}</div>
-                <div style="font-size:9px; opacity:0.6; font-weight:700;">CLIENTS</div>
+                FINANCE CORE SYSTEM
+            </p>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top:15px;">
+                <div style="flex:1; background:rgba(255,255,255,0.08); padding:10px 5px; border-radius:12px; color:white; border:1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:14px; font-weight:bold;">💵 {total_loans}</div>
+                    <div style="font-size:9px; opacity:0.6; font-weight:700;">LOANS</div>
+                </div>
+                <div style="flex:1; background:rgba(255,255,255,0.08); padding:10px 5px; border-radius:12px; color:white; border:1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:14px; font-weight:bold;">👥 {total_clients}</div>
+                    <div style="font-size:9px; opacity:0.6; font-weight:700;">CLIENTS</div>
+                </div>
             </div>
         </div>
+        """, unsafe_allow_html=True)
 
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        menu = {
+            "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
+            "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
+            "Petty Cash": "🪙", "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
+        }
 
-    st.markdown(
-        "<hr style='margin: 20px 0; border:0; border-top:1px solid rgba(255,255,255,0.1);'>",
-        unsafe_allow_html=True
-    )
-
-    # ==============================
-    # NAVIGATION
-    # ==============================
-    menu = {
-        "Overview": "📈",
-        "Loans": "💵",
-        "Borrowers": "👥",
-        "Collateral": "🛡️",
-        "Calendar": "📅",
-        "Ledger": "📄",
-        "Payroll": "💳",
-        "Expenses": "📉",
-        "Petty Cash": "🪙",
-        "Overdue Tracker": "🚨",
-        "Payments": "💰",
-        "Settings": "⚙️"
-    }
-
-    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-    current_p = st.session_state.get('current_page', "Overview")
-
-    try:
-        default_ix = list(menu.keys()).index(current_p)
-    except Exception:
-        default_ix = 0
-
-    selection = st.radio(
-        "Navigation",
-        menu_options,
-        index=default_ix,
-        label_visibility="collapsed",
-        key="navigation_radio"
-    )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ==============================
-    # 🔐 LOGOUT
-    # ==============================
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-
-    if st.button("🚪 Logout", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            if key not in ["theme_color"]:
-                del st.session_state[key]
+        menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+        current_p = st.session_state.get('current_page', "Overview")
 
         try:
-            st.rerun()
-        except Exception:
-            pass
+            default_ix = list(menu.keys()).index(current_p)
+        except:
+            default_ix = 0
 
+        selection = st.radio(
+            "Navigation",
+            menu_options,
+            index=default_ix,
+            label_visibility="collapsed",
+            key="navigation_radio"
+        )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
 
-# ==============================
-# 🎯 PAGE RESOLUTION
-# ==============================
-try:
-    final_page = selection.split(" ", 1)[1]
-except Exception:
-    final_page = "Overview"
+        # ==============================
+        # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
+        # ==============================
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-st.session_state['current_page'] = final_page
+        if st.button("🚪 Logout", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                if key not in ["theme_color"]:
+                    del st.session_state[key]
+            try:
+                st.rerun()
+            except:
+                pass
 
-return final_page
+    # ==============================
+    # 🎯 PAGE RESOLUTION
+    # ==============================
+    try:
+        final_page = selection.split(" ", 1)[1]
+    except:
+        final_page = "Overview"
+
+    st.session_state['current_page'] = final_page
+
+    return final_page
         
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE (SAAS + DEBUG FIXED + ENTERPRISE UPGRADE)
