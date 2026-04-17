@@ -2734,7 +2734,7 @@ def show_payroll():
     # ==============================
     # 📑 TABS
     # ==============================
-    tab_process, tab_logs, tab2 = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger"])
+    tab_process, tab_logs, tab_ledger = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger"])
 
     # ==============================
     # 💳 PROCESS PAYROLL
@@ -2817,7 +2817,7 @@ def show_payroll():
     # ==============================
     # 📜 PAYROLL TABLE
     # ==============================
-    with tab2:
+    with tab_ledger:
 
         if not df.empty:
 
