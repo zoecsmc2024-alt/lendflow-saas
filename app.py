@@ -873,7 +873,7 @@ def show_borrowers():
                 else:
                     st.error("⚠️ Please fill in Name and Phone Number.")
 
-   with tab_view:
+    with tab_view:
         # ==============================
         # 🔍 SEARCH
         # ==============================
