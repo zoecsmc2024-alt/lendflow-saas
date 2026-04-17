@@ -737,7 +737,7 @@ def render_sidebar():
     return final_page
         
 # ==============================
-# 🚀 BALLISTIC BORROWERS ENGINE (PRODUCTION)
+# 🚀 BORROWERS ENGINE (PRODUCTION)
 # ==============================
 import streamlit as st
 import pandas as pd
@@ -751,7 +751,7 @@ def show_borrowers():
     # 🎨 BRAND
     # ==============================
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f"<h2 style='color:{brand_color};'>🚀 Ballistic Borrowers Intelligence</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color:{brand_color};'>🚀 Borrowers</h2>", unsafe_allow_html=True)
 
     # ==============================
     # 🔐 TENANT
@@ -855,40 +855,46 @@ def show_borrowers():
     else:
         risk_map = {}
 
-        # ==============================
-    # ➕ ADD BORROWER (TOP PRIORITY)
-    # ==============================
-    st.markdown("### ➕ Add Borrower")
-
-    with st.form("add_borrower", clear_on_submit=True):
-
-        c1, c2, c3 = st.columns(3)
-        name = c1.text_input("Full Name")
-        phone = c2.text_input("Phone")
-        email = c3.text_input("Email")
-
-        if st.form_submit_button("Add Borrower"):
-
-            if name and phone:
-
-                new = pd.DataFrame([{
-                    "id": str(uuid.uuid4()),
-                    "name": name,
-                    "phone": phone,
-                    "email": email,
-                    "status": "Active",
-                    "tenant_id": str(tenant_id)
-                }])
-
-                updated = pd.concat([borrowers_df, new], ignore_index=True)
-
-                if save_data("borrowers", updated):
-                    st.success("Borrower added")
-                    st.rerun()
-            else:
-                st.error("Name & phone required")
-
-    st.divider()
+        # --- TAB 2: ADD BORROWER ---
+    with tab_add:
+        with st.form("add_borrower_form", clear_on_submit=True):
+            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
+            c1, c2 = st.columns(2)
+            
+            # Row 1
+            name = c1.text_input("Full Name*")
+            phone = c2.text_input("Phone Number*")
+            
+            # Row 2
+            email = c1.text_input("Email Address")
+            nid = c2.text_input("National ID / NIN")
+            
+            # Row 3
+            addr = c1.text_input("Physical Address")
+            nok = c2.text_input("Next of Kin (Name & Contact)")
+            
+            if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
+                if name and phone:
+                    new_id = str(uuid.uuid4())
+                    t_id = st.session_state.get('tenant_id', 'test-tenant-123')
+                    
+                    new_entry = pd.DataFrame([{
+                        "id": new_id, 
+                        "name": name, 
+                        "phone": phone, 
+                        "email": email,
+                        "national_id": nid, 
+                        "address": addr, 
+                        "next_of_kin": nok,
+                        "status": "Active",
+                        "tenant_id": t_id 
+                    }])
+                    
+                    if save_data("borrowers", new_entry):
+                        st.success(f"✅ {name} registered!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ Please fill in Name and Phone Number.")
 
     # ==============================
     # 🔍 SEARCH
@@ -946,41 +952,48 @@ def show_borrowers():
             </span>
             """
 
-            rows += f"""
-            <tr style="border-bottom:1px solid #eee;">
-                <td style="padding:10px; font-weight:600;">{name}</td>
-                <td style="padding:10px;">{phone}</td>
-                <td style="padding:10px;">{email}</td>
-                <td style="padding:10px;">{risk_badge}</td>
-                <td style="padding:10px; font-weight:600;">UGX {exposure:,.0f}</td>
-                <td style="padding:10px;">
-                    <button onclick="window.location.reload()">View</button>
-                </td>
-            </tr>
-            """
-
-        st.markdown(f"""
-        <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse;">
-            <thead>
-                <tr style="background:{brand_color}; color:white;">
-                    <th style="padding:12px;">Name</th>
-                    <th style="padding:12px;">Phone</th>
-                    <th style="padding:12px;">Email</th>
-                    <th style="padding:12px;">Risk</th>
-                    <th style="padding:12px;">Exposure</th>
-                    <th style="padding:12px;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {rows}
-            </tbody>
-        </table>
-        </div>
-        """, unsafe_allow_html=True)
-
-    else:
-        st.info("No borrowers found.")
+            rows_html = ""
+                for i, r in filtered_df.reset_index().iterrows():
+                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                    
+                    # Safely grab values using .get() to prevent 'KeyError' crashes
+                    name_val = r.get(name_col, 'Unknown')
+                    phone_val = r.get(phone_col, 'N/A')
+                    email_val = r.get('email', 'N/A')
+                    nok_val = r.get('next_of_kin', 'N/A')
+                    stat_val = r.get(status_col, 'Active')
+                    
+                    rows_html += f"""
+                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
+                        <td style="padding:12px;"><b>{name_val}</b></td>
+                        <td style="padding:12px;">{phone_val}</td>
+                        <td style="padding:12px;">{email_val}</td>
+                        <td style="padding:12px;">{nok_val}</td>
+                        <td style="padding:12px; text-align:center;">
+                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{stat_val}</span>
+                        </td>
+                    </tr>"""
+                
+                # Render the table
+                st.markdown(f"""
+                <div style='border:2px solid {brand_color}33; border-radius:10px; overflow:hidden; margin-top:20px;'>
+                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
+                        <thead>
+                            <tr style='background:{brand_color}; color:white; text-align:left;'>
+                                <th style='padding:12px;'>Borrower Name</th>
+                                <th style='padding:12px;'>Phone</th>
+                                <th style='padding:12px;'>Email</th>
+                                <th style='padding:12px;'>Next of Kin</th>
+                                <th style='padding:12px; text-align:center;'>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows_html}</tbody>
+                    </table>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.info("No borrowers found matching your search.")
+        else:
+            st.info("No borrowers registered yet.")
 
     # ==============================
     # 👤 BORROWER PROFILE PANEL
