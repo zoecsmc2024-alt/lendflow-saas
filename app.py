@@ -883,7 +883,7 @@ def show_borrowers():
     else:
         st.success("✅ No critical borrowers")
         
-tab_main, tab_audit = st.tabs(["📋 Borrowers", "🧾 Audit",🛠️ Actions])
+tab_main, tab_audit = st.tabs(["📋 Borrowers", "🧾 Audit"])
         # ==============================
     # 🔍 SEARCH
     # ==============================
