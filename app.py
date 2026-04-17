@@ -732,10 +732,12 @@ with st.sidebar:
                 st.rerun()
             except:
                 pass
+
     # ==============================
     # 🎯 PAGE RESOLUTION
     # ==============================
     try:
+        # Extract the page name from the selection (e.g., "📈 Overview" -> "Overview")
         final_page = selection.split(" ", 1)[1]
     except:
         final_page = "Overview"
