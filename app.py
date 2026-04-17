@@ -894,12 +894,11 @@ def show_borrowers():
             filtered_df = df_to_show[mask]
 
             if not filtered_df.empty:
-                rows_html = ""
-                # --- START ROW GENERATION LOOP ---
+                # 1. Start with an empty string
+                rows_html = "" 
+                
                 for i, r in filtered_df.reset_index().iterrows():
                     b_id = str(r.get("id", ""))
-                    
-                    # Risk Logic
                     risk = risk_map.get(b_id, {})
                     risk_label = risk.get("risk", "🟢 Healthy")
                     
@@ -908,7 +907,7 @@ def show_borrowers():
                     elif "🟡" in risk_label: color = "#f59e0b"
                     else: color = "#16a34a"
 
-                    # Build the individual rows
+                    # 2. APPEND the rows to the string (DO NOT use st.markdown here)
                     rows_html += f"""
                     <tr>
                         <td><span class="borrower-name">{r.get('name', 'N/A')}</span></td>
@@ -918,58 +917,17 @@ def show_borrowers():
                         <td style="text-align:center;"><span class="status-badge">{r.get('status', 'Active')}</span></td>
                     </tr>
                     """
-                # --- END ROW GENERATION LOOP ---
 
-                # Now render the full table ONCE
+                # 3. NOW render the full structure once the loop is 100% finished
                 st.markdown(f"""
                 <style>
-                .borrower-table {{
-                    border-radius:12px;
-                    overflow:hidden;
-                    border:1px solid #e5e7eb;
-                    box-shadow:0 4px 12px rgba(0,0,0,0.04);
-                    margin-bottom: 20px;
-                }}
-                .borrower-table table {{
-                    width:100%;
-                    border-collapse:collapse;
-                    font-family:sans-serif;
-                    font-size:13px;
-                }}
-                .borrower-table thead tr {{
-                    background:{brand_color};
-                    color:white;
-                    text-transform:uppercase;
-                    font-size:11px;
-                    letter-spacing:0.5px;
-                }}
-                .borrower-table th, .borrower-table td {{
-                    padding:12px;
-                    text-align: left;
-                }}
-                .borrower-table tbody tr:hover {{
-                    background:#f9fafb;
-                    transition:0.2s ease;
-                }}
-                .borrower-name {{
-                    font-weight:600;
-                    color:#111827;
-                }}
-                .status-badge {{
-                    background:{brand_color};
-                    color:white;
-                    padding:4px 10px;
-                    border-radius:20px;
-                    font-size:11px;
-                    font-weight:500;
-                }}
-                .risk-badge {{
-                    padding:4px 10px;
-                    border-radius:20px;
-                    font-size:11px;
-                    font-weight:600;
-                    color:white;
-                }}
+                    .borrower-table {{ border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; }}
+                    .borrower-table table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+                    .borrower-table thead tr {{ background:{brand_color}; color:white; }}
+                    .borrower-table th, .borrower-table td {{ padding:12px; text-align: left; }}
+                    .borrower-name {{ font-weight:600; color:#111827; }}
+                    .status-badge {{ background:{brand_color}; color:white; padding:4px 10px; border-radius:20px; font-size:11px; }}
+                    .risk-badge {{ padding:4px 10px; border-radius:20px; font-size:11px; color:white; }}
                 </style>
 
                 <div class="borrower-table">
