@@ -2680,10 +2680,9 @@ def show_payroll():
     if df is not None and not df.empty:
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
         
-        # Mapping common Supabase variations to match your required_keys logic
+        # Mapping database names to logic names so the table finds the data
         rename_map = {
             "employee_name": "employee",
-            "name": "employee",
             "salary_basic": "basic_salary",
             "absenteeism_deduction": "absent_deduction",
             "advance_salary": "advance_drs",
@@ -2781,6 +2780,7 @@ def show_payroll():
                         f_basic, f_arrears, f_absent, f_adv, f_other
                     )
 
+                    # FIXED: Keys here match your Supabase columns exactly
                     new_row = pd.DataFrame([{
                         "employee": name,
                         "tin": f_tin,
@@ -2816,7 +2816,7 @@ def show_payroll():
         if not df.empty:
             def fm(x):
                 try:
-                    return f"{int(float(x)):,}"
+                    return f"{int(float(x or 0)):,}"
                 except:
                     return "0"
 
