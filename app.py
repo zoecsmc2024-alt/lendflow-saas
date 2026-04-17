@@ -59,81 +59,136 @@ def apply_master_theme():
 
     st.markdown(f"""
     <style>
-    /* SELECTBOX FIX */
-    div[data-baseweb="select"] > div {{
-        background: rgba(255,255,255,0.9) !important;
-        border-radius: 12px !important;
-        border: none !important;
-        font-weight: 500;
+
+    /* ==============================
+       GLOBAL FONT + SMOOTHING
+    ============================== */
+    html, body, [class*="css"] {{
+        font-family: 'Source Sans Pro', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }}
 
-    /* 🔥 FIX NAV TEXT VISIBILITY */
-    div[role="radiogroup"] label {{
-        color: rgba(255,255,255,0.95) !important;
-        font-weight: 500 !important;
-    }}
-
-    /* 🔥 FIX ICON + TEXT ROW */
-    div[role="radiogroup"] label span {{
-        color: rgba(255,255,255,0.95) !important;
-    }}
-
-    /* 🔥 INACTIVE ITEMS (slightly dim but visible) */
-    div[role="radiogroup"] label {{
-        opacity: 0.85;
-        padding: 10px !important;
-        border-radius: 10px;
-        transition: 0.2s ease;
-    }}
-
-    /* 🔥 ACTIVE ITEM (FULL BRIGHT + GLOW) */
-    div[role="radiogroup"] input:checked + div {{
-        opacity: 1 !important;
-        color: #ffffff !important;
-        background: rgba(255,255,255,0.18) !important;
-        border-radius: 10px;
-        box-shadow: 0 0 10px rgba(255,255,255,0.1);
-    }}
-
-    div[role="radiogroup"] label div {{
-        color: white !important;
-    }}
-
-    /* HOVER */
-    div[role="radiogroup"] label:hover {{
-        background: rgba(255,255,255,0.08);
-    }}
-
-    /* SIDEBAR BACKGROUND (GRADIENT) */
+    /* ==============================
+       SIDEBAR BACKGROUND (GRADIENT + DEPTH)
+    ============================== */
     [data-testid="stSidebar"] {{
         background: linear-gradient(180deg, {brand_color} 0%, #0F172A 100%) !important;
+        border-right: 1px solid rgba(255,255,255,0.05);
     }}
 
-    /* REMOVE DEFAULT PADDING */
+    /* REMOVE TOP GAP */
     [data-testid="stSidebar"] > div:first-child {{
         padding-top: 0rem;
     }}
 
-    /* NAV TEXT */
-    [data-testid="stSidebar"] .stRadio label {{
-        color: white !important;
-        font-size: 15px !important;
-        font-weight: 500 !important;
+    /* ==============================
+       SELECTBOX (CLEAN WHITE GLASS)
+    ============================== */
+    div[data-baseweb="select"] > div {{
+        background: rgba(255,255,255,0.95) !important;
+        border-radius: 12px !important;
+        border: none !important;
+        font-weight: 500;
+        color: #111827 !important;
     }}
 
-    /* BUTTONS */
+    /* ==============================
+       RADIO GROUP (NAVIGATION)
+    ============================== */
+    div[role="radiogroup"] {{
+        margin-top: 10px;
+    }}
+
+    /* EACH NAV ITEM */
+    div[role="radiogroup"] label {{
+        display: block;
+        padding: 10px 12px;
+        border-radius: 10px;
+        margin-bottom: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: rgba(255,255,255,0.95) !important;
+        font-weight: 500;
+        opacity: 0.85;
+    }}
+
+    /* ICON + TEXT FIX */
+    div[role="radiogroup"] label span {{
+        color: rgba(255,255,255,0.95) !important;
+    }}
+
+    /* HOVER STATE */
+    div[role="radiogroup"] label:hover {{
+        background: rgba(255,255,255,0.08);
+        opacity: 1;
+        transform: translateX(2px);
+    }}
+
+    /* ACTIVE (SELECTED) ITEM */
+    div[role="radiogroup"] input:checked + div {{
+        background: rgba(255,255,255,0.18) !important;
+        color: #ffffff !important;
+        border-radius: 10px;
+        box-shadow: 0 0 12px rgba(255,255,255,0.15);
+        opacity: 1 !important;
+    }}
+
+    /* FORCE TEXT WHITE IN ACTIVE */
+    div[role="radiogroup"] input:checked + div span {{
+        color: #ffffff !important;
+        font-weight: 600;
+    }}
+
+    /* ==============================
+       DIVIDER LINE (SOFT)
+    ============================== */
+    hr {{
+        border: none;
+        border-top: 1px solid rgba(255,255,255,0.08);
+    }}
+
+    /* ==============================
+       BUTTONS (LOGOUT ETC)
+    ============================== */
     [data-testid="stSidebar"] button {{
-        background-color: white !important;
+        background: rgba(255,255,255,0.95) !important;
         color: {brand_color} !important;
         border-radius: 10px !important;
         font-weight: 600 !important;
+        border: none;
+        transition: all 0.2s ease;
     }}
 
-    /* LOGO CIRCLE EFFECT */
-    .logo-container img {{
-        border-radius: 50%;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    [data-testid="stSidebar"] button:hover {{
+        background: white !important;
+        transform: scale(1.02);
     }}
+
+    /* ==============================
+       IMAGE (LOGO) POLISH
+    ============================== */
+    img {{
+        max-width: 100%;
+        height: auto;
+    }}
+
+    /* ==============================
+       SCROLLBAR (PREMIUM TOUCH)
+    ============================== */
+    ::-webkit-scrollbar {{
+        width: 6px;
+    }}
+
+    ::-webkit-scrollbar-thumb {{
+        background: rgba(255,255,255,0.2);
+        border-radius: 10px;
+    }}
+
+    ::-webkit-scrollbar-track {{
+        background: transparent;
+    }}
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -576,7 +631,7 @@ def render_sidebar():
             st.stop()
 
         # ==============================
-        # 💎 PRO BRAND BLOCK (ELITE - SYNCHRONIZED)
+        # 💎 SIDEBAR BRANDING (ELITE)
         # ==============================
         import time
 
@@ -591,63 +646,99 @@ def render_sidebar():
                     project_url = st.secrets.get("supabase_url") or st.secrets.get("SUPABASE_URL")
                     project_url = project_url.strip("/")
                     final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
-                except:
+                except Exception:
                     final_logo_url = None
 
-        # Logic for creating the logo HTML component
+        # ✅ SAFE LOGO BLOCK
         if final_logo_url:
             logo_component = f"""
             <div style="
-                display:inline-block;
-                padding:12px;
-                border-radius:50%;
-                background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
-                box-shadow: 0 0 25px rgba(255,255,255,0.15);
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                margin-top:10px;
             ">
-                <img src="{final_logo_url}?t={int(time.time())}" width="80" style="border-radius:50%; object-fit:cover;"/>
+                <div style="
+                    padding:10px;
+                    border-radius:50%;
+                    background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
+                    box-shadow: 0 0 20px rgba(255,255,255,0.12);
+                ">
+                    <img src="{final_logo_url}?t={int(time.time())}"
+                         width="70"
+                         style="border-radius:50%; object-fit:cover;" />
+                </div>
+            </div>
+            """.strip()
+        else:
+            logo_component = """
+            <div style="text-align:center; margin-top:10px;">
+                <h1 style="font-size:38px; margin:0;">🏢</h1>
             </div>
             """
-        else:
-            logo_component = "<h1 style='font-size:40px; margin:0;'>🏢</h1>"
 
-        # Fetch stats safely
+        # ✅ SAFE STATS
         total_loans = len(st.session_state.get('loans_df', []))
         total_clients = len(st.session_state.get('borrowers_df', []))
 
-        # Render the entire Elite Brand Block
+        # ✅ FINAL RENDER (ONE BLOCK ONLY)
         st.markdown(f"""
-        <div style="text-align:center; margin-top:20px;">
+        <div style="text-align:center; padding:10px 5px 0 5px;">
             {logo_component}
-            <div style="margin-top:12px;">
-                <h3 style="color:white; margin:0;">
+            <div style="margin-top:10px;">
+                <h3 style="
+                    color:white;
+                    margin:0;
+                    font-size:16px;
+                    font-weight:600;
+                ">
                     {Active_company_name}
                     <span style="
-                        font-size:12px;
+                        font-size:10px;
                         background:#22c55e;
                         color:white;
-                        padding:2px 6px;
-                        border-radius:6px;
+                        padding:2px 5px;
+                        border-radius:5px;
+                        margin-left:4px;
                     ">✔</span>
                 </h3>
             </div>
             <p style="
-                font-size:11px;
+                font-size:10px;
                 color:rgba(255,255,255,0.6);
                 letter-spacing:1px;
                 margin-top:4px;
                 text-transform: uppercase;
                 font-weight:600;
             ">
-                FINANCE CORE SYSTEM
+                FINANCE CORE
             </p>
-            <div style="display:flex; justify-content:center; gap:10px; margin-top:15px;">
-                <div style="flex:1; background:rgba(255,255,255,0.08); padding:10px 5px; border-radius:12px; color:white; border:1px solid rgba(255,255,255,0.1);">
-                    <div style="font-size:14px; font-weight:bold;">💵 {total_loans}</div>
-                    <div style="font-size:9px; opacity:0.6; font-weight:700;">LOANS</div>
+            <div style="
+                display:flex;
+                gap:8px;
+                margin-top:12px;
+            ">
+                <div style="
+                    flex:1;
+                    background:rgba(255,255,255,0.08);
+                    padding:8px 4px;
+                    border-radius:10px;
+                    color:white;
+                    border:1px solid rgba(255,255,255,0.08);
+                ">
+                    <div style="font-size:13px; font-weight:600;">💵 {total_loans}</div>
+                    <div style="font-size:8px; opacity:0.6;">LOANS</div>
                 </div>
-                <div style="flex:1; background:rgba(255,255,255,0.08); padding:10px 5px; border-radius:12px; color:white; border:1px solid rgba(255,255,255,0.1);">
-                    <div style="font-size:14px; font-weight:bold;">👥 {total_clients}</div>
-                    <div style="font-size:9px; opacity:0.6; font-weight:700;">CLIENTS</div>
+                <div style="
+                    flex:1;
+                    background:rgba(255,255,255,0.08);
+                    padding:8px 4px;
+                    border-radius:10px;
+                    color:white;
+                    border:1px solid rgba(255,255,255,0.08);
+                ">
+                    <div style="font-size:13px; font-weight:600;">👥 {total_clients}</div>
+                    <div style="font-size:8px; opacity:0.6;">CLIENTS</div>
                 </div>
             </div>
         </div>
