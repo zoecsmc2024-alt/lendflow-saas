@@ -886,6 +886,10 @@ def show_borrowers():
             df_to_show = borrowers_df.copy()
             df_to_show["name"] = df_to_show["name"].astype(str)
             df_to_show["phone"] = df_to_show["phone"].astype(str)
+            # Ensure new columns exist for string conversion
+            for col in ["national_id", "next_of_kin"]:
+                if col in df_to_show.columns:
+                    df_to_show[col] = df_to_show[col].astype(str)
 
             mask = (
                 df_to_show["name"].str.lower().str.contains(search, na=False) |
@@ -912,7 +916,8 @@ def show_borrowers():
                     <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
                         <td style="padding:12px;"><b>{r.get('name', 'Unknown')}</b></td>
                         <td style="padding:12px;">{r.get('phone', 'N/A')}</td>
-                        <td style="padding:12px;">{r.get('email', 'N/A')}</td>
+                        <td style="padding:12px; font-size:11px; color:#666;">{r.get('national_id', 'N/A')}</td>
+                        <td style="padding:12px; font-size:11px;">{r.get('next_of_kin', 'N/A')}</td>
                         <td style="padding:12px;">
                             <span style="background:{color}; color:white; padding:3px 8px; border-radius:12px; font-size:11px;">
                                 {risk_label}
@@ -932,7 +937,8 @@ def show_borrowers():
                             <tr style='background:{brand_color}; color:white; text-align:left;'>
                                 <th style='padding:12px;'>Borrower Name</th>
                                 <th style='padding:12px;'>Phone</th>
-                                <th style='padding:12px;'>Email</th>
+                                <th style='padding:12px;'>National ID</th>
+                                <th style='padding:12px;'>Next of Kin</th>
                                 <th style='padding:12px;'>Risk Status</th>
                                 <th style='padding:12px; text-align:center;'>Status</th>
                             </tr>
@@ -979,6 +985,11 @@ def show_borrowers():
                 name = c1.text_input("Name", borrower["name"])
                 phone = c2.text_input("Phone", borrower["phone"])
                 email = c1.text_input("Email", borrower["email"])
+                
+                # New inputs for ID and Next of Kin
+                c3, c4 = st.columns(2)
+                nid = c3.text_input("National ID", borrower.get("national_id", ""))
+                nok = c4.text_input("Next of Kin", borrower.get("next_of_kin", ""))
 
                 # ==============================
                 # 📊 LOANS LINKED (CLEAN VIEW)
@@ -996,6 +1007,7 @@ def show_borrowers():
                             "id": None, "tenant_id": None, "borrower_id": None, 
                             "created_at": None, "type": None, "borrower_name": None,
                             "status_new": None, "due_date": None, "days_overdue": None, "is_overdue": None,
+                            "national_id": None, "next_of_kin": None, # Hide in loan history
 
                             "principal": st.column_config.NumberColumn("Principal", format="%,d"),
                             "interest": st.column_config.NumberColumn("Interest", format="%,d"),
