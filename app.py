@@ -2092,6 +2092,187 @@ def show_petty_cash():
                 
 
 # ==============================
+# 🚨 OVERDUE TRACKER (AI-POWERED)
+# ==============================
+
+def show_overdue_tracker():
+    """
+    Tracks overdue loans with AI-style risk scoring.
+    """
+
+    # ==============================
+    # 🎨 UI SYSTEM
+    # ==============================
+    st.markdown("""
+    <style>
+    .glass-card {
+        backdrop-filter: blur(10px);
+        background: linear-gradient(145deg, rgba(255,255,255,0.7), rgba(255,255,255,0.4));
+        border-radius: 16px;
+        padding: 18px;
+        border: 1px solid rgba(255,255,255,0.25);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+    }
+    .metric-title {
+        font-size: 11px;
+        color: #6b7280;
+        font-weight: 600;
+    }
+    .metric-value {
+        font-size: 22px;
+        font-weight: 700;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<h2 style='color:#2B3F87;'>🚨 AI Overdue Intelligence</h2>", unsafe_allow_html=True)
+
+    # ==============================
+    # 📥 FETCH DATA
+    # ==============================
+    loans_df = pd.DataFrame(get_cached_data("loans"))
+
+    if loans_df.empty:
+        st.warning("No loan data available.")
+        return
+
+    loans_df["due_date"] = pd.to_datetime(loans_df.get("due_date"), errors="coerce")
+    loans_df["amount"] = pd.to_numeric(loans_df.get("amount"), errors="coerce").fillna(0)
+
+    today = pd.Timestamp.today()
+
+    # ==============================
+    # 🧠 AI ENGINE (SCORING MODEL)
+    # ==============================
+    loans_df["days_overdue"] = (today - loans_df["due_date"]).dt.days
+    overdue_df = loans_df[loans_df["days_overdue"] > 0].copy()
+
+    if overdue_df.empty:
+        st.success("🎉 No overdue loans.")
+        return
+
+    # 🔮 AI RISK SCORE
+    def compute_score(row):
+        score = 0
+
+        # Weight 1: Days overdue
+        score += min(row["days_overdue"] * 1.5, 50)
+
+        # Weight 2: Loan size impact
+        if row["amount"] > 1_000_000:
+            score += 25
+        elif row["amount"] > 300_000:
+            score += 15
+        else:
+            score += 5
+
+        return min(score, 100)
+
+    overdue_df["risk_score"] = overdue_df.apply(compute_score, axis=1)
+
+    # 🔮 Prediction label
+    def predict(score):
+        if score >= 70:
+            return "High Risk"
+        elif score >= 40:
+            return "Watch"
+        return "Stable"
+
+    overdue_df["prediction"] = overdue_df["risk_score"].apply(predict)
+
+    # ==============================
+    # 💎 KPI
+    # ==============================
+    total_overdue = len(overdue_df)
+    high_risk = len(overdue_df[overdue_df["prediction"] == "High Risk"])
+    exposure = overdue_df["amount"].sum()
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">OVERDUE LOANS</div>
+        <div class="metric-value">{total_overdue}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c2.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">HIGH RISK CASES</div>
+        <div class="metric-value" style="color:#EF4444;">{high_risk}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c3.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">TOTAL EXPOSURE</div>
+        <div class="metric-value">{exposure:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ==============================
+    # 📊 PRIORITY TABLE
+    # ==============================
+    def color_pred(val):
+        if val == "High Risk":
+            return "color:#EF4444; font-weight:700;"
+        elif val == "Watch":
+            return "color:#F59E0B;"
+        return "color:#10B981;"
+
+    st.markdown("### 🔥 Priority List (AI Ranked)")
+
+    st.dataframe(
+        overdue_df.sort_values("risk_score", ascending=False)
+        .style.map(color_pred, subset=["prediction"])
+        .format({"amount": "{:,.0f}", "risk_score": "{:.0f}"}),
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # ==============================
+    # 🧠 AI INSIGHT PANEL
+    # ==============================
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    worst = overdue_df.sort_values("risk_score", ascending=False).iloc[0]
+
+    st.markdown(f"""
+    <div class="glass-card">
+        <b>🧠 AI Insight:</b><br><br>
+        Highest risk loan is <b>ID {int(worst['id'])}</b><br>
+        • Days overdue: {int(worst['days_overdue'])}<br>
+        • Amount: {worst['amount']:,.0f} UGX<br>
+        • Risk Score: {worst['risk_score']:.0f}/100<br><br>
+        👉 Recommended action: Immediate follow-up.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ==============================
+    # ⚙️ ACTION PANEL
+    # ==============================
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    with st.expander("⚙️ Take Action"):
+        options = [
+            f"ID: {int(row['id'])} | Score: {row['risk_score']:.0f}"
+            for _, row in overdue_df.iterrows()
+        ]
+
+        selected = st.selectbox("Select Loan", options)
+        sel_id = int(selected.split(" | ")[0].replace("ID: ", ""))
+
+        if st.button("📞 Mark as Contacted"):
+            st.success("Follow-up recorded (extend logic here).")
+
+        if st.button("✅ Mark as Paid"):
+            supabase.table("loans").update({"status": "Paid"}).eq("id", sel_id).execute()
+            st.success("Marked as paid.")
+            st.rerun()
+
+# ==============================
 # 19. PAYROLL MANAGEMENT PAGE
 # ==============================
 
@@ -3082,6 +3263,8 @@ if __name__ == "__main__":
                 show_expenses()
             elif page == "Petty Cash":
                 show_petty_cash()
+            elif page == "Overdue Tracker":
+                show_Overdue Tracker()
             elif page == "Payroll":
                 show_payroll()
             else:
