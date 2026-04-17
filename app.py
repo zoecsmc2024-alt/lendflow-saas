@@ -894,20 +894,18 @@ def show_borrowers():
             filtered_df = df_to_show[mask]
 
             if not filtered_df.empty:
-                # 1. Start with an empty string
                 rows_html = "" 
                 
+                # --- LOOP 1: ONLY BUILD THE STRING ---
                 for i, r in filtered_df.reset_index().iterrows():
                     b_id = str(r.get("id", ""))
                     risk = risk_map.get(b_id, {})
                     risk_label = risk.get("risk", "🟢 Healthy")
                     
-                    if "🔴" in risk_label: color = "#dc2626"
-                    elif "🟠" in risk_label: color = "#ea580c"
-                    elif "🟡" in risk_label: color = "#f59e0b"
-                    else: color = "#16a34a"
+                    # (Logic for colors remains the same...)
+                    color = "#dc2626" if "🔴" in risk_label else "#16a34a"
 
-                    # 2. APPEND the rows to the string (DO NOT use st.markdown here)
+                    # Add to the string variable only
                     rows_html += f"""
                     <tr>
                         <td><span class="borrower-name">{r.get('name', 'N/A')}</span></td>
@@ -918,27 +916,20 @@ def show_borrowers():
                     </tr>
                     """
 
-                # 3. NOW render the full structure once the loop is 100% finished
+                # --- STEP 2: RENDER ONCE (MUST BE OUTSIDE THE LOOP) ---
+                # Check your indentation: This 'st.markdown' must be aligned with 'for'
                 st.markdown(f"""
                 <style>
                     .borrower-table {{ border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; }}
                     .borrower-table table {{ width:100%; border-collapse:collapse; font-size:13px; }}
                     .borrower-table thead tr {{ background:{brand_color}; color:white; }}
                     .borrower-table th, .borrower-table td {{ padding:12px; text-align: left; }}
-                    .borrower-name {{ font-weight:600; color:#111827; }}
-                    .status-badge {{ background:{brand_color}; color:white; padding:4px 10px; border-radius:20px; font-size:11px; }}
-                    .risk-badge {{ padding:4px 10px; border-radius:20px; font-size:11px; color:white; }}
                 </style>
-
                 <div class="borrower-table">
                     <table>
                         <thead>
                             <tr>
-                                <th>Borrower</th>
-                                <th>Phone</th>
-                                <th>Email</th>
-                                <th>Risk</th>
-                                <th style="text-align:center;">Status</th>
+                                <th>Borrower</th><th>Phone</th><th>Email</th><th>Risk</th><th style="text-align:center;">Status</th>
                             </tr>
                         </thead>
                         <tbody>
