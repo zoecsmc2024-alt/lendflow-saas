@@ -2644,7 +2644,7 @@ def show_overdue_tracker():
             st.info("No selectable records.")
 
 # ==============================
-# 19. PAYROLL MANAGEMENT PAGE
+# 💣 BALLISTIC PAYROLL SYSTEM (ELITE UI)
 # ==============================
 
 import pandas as pd
@@ -2652,166 +2652,235 @@ import streamlit as st
 from datetime import datetime
 
 def show_payroll():
-    """
-    Handles employee compensation, tax compliance, and multi-tenant payroll logs.
-    Preserves exact Excel-matching PAYE and NSSF logic.
-    """
+
+    # ==============================
+    # 🔐 ACCESS CONTROL
+    # ==============================
     if st.session_state.get("role") != "Admin":
-        st.error("🔒 Restricted Access: Only Administrators can process payroll.")
+        st.error("🔒 Restricted Access: Admins only.")
         return
 
-    st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
+    brand_color = "#2B3F87"
 
-    current_tenant = st.session_state.get("tenant_id")
+    st.markdown(f"""
+    <h2 style='color:{brand_color};'>💣 Payroll Intelligence System</h2>
+    """, unsafe_allow_html=True)
 
-    # ==============================
-    # 🔐 SAFETY CHECK (SAAS HARD GUARD)
-    # ==============================
-    if not current_tenant:
-        st.error("🔐 Session expired. Please log in again.")
+    tenant = st.session_state.get("tenant_id")
+    if not tenant:
+        st.error("Session expired")
         st.stop()
 
     # ==============================
-    # 1. FETCH TENANT DATA
+    # 📥 LOAD DATA
     # ==============================
     df = get_cached_data("payroll")
 
-    # Standardize column names to prevent "History" tab from going blank
     if df is not None and not df.empty:
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-        
-        # Mapping database names to logic names so the table finds the data
-        rename_map = {
-            "employee_name": "employee",
-            "salary_basic": "basic_salary",
-            "absenteeism_deduction": "absent_deduction",
-            "advance_salary": "advance_drs",
-            "tin_no": "tin",
-            "mobile_no": "mob_no"
-        }
-        df = df.rename(columns=rename_map)
-
-    required_keys = [
-        "id","employee","tin","designation","mob_no","account_no","nssf_no",
-        "arrears","basic_salary","absent_deduction","lst","gross_salary",
-        "paye","nssf_5","advance_drs","other_deductions","net_pay",
-        "nssf_10","nssf_15","date"
-    ]
 
     if df is None or df.empty:
-        df = pd.DataFrame(columns=required_keys)
+        df = pd.DataFrame()
 
-    # Filter data to only show records for the Active tenant
     if "tenant_id" in df.columns:
-        df = df[df["tenant_id"].astype(str) == str(current_tenant)]
-    else:
-        df["tenant_id"] = current_tenant
+        df = df[df["tenant_id"].astype(str) == str(tenant)]
 
     # ==============================
-    # CALC ENGINE (UGANDAN TAX COMPLIANCE)
+    # 🧠 CALC ENGINE (UNCHANGED)
     # ==============================
-    def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
-        basic = float(basic or 0)
-        arrears = float(arrears or 0)
-        absent_deduct = float(absent_deduct or 0)
-        advance = float(advance or 0)
-        other = float(other or 0)
+    def calc_engine(basic, arrears, absent, advance, other):
+        basic, arrears = float(basic or 0), float(arrears or 0)
+        absent, advance, other = float(absent or 0), float(advance or 0), float(other or 0)
 
-        # 1. Calculate Gross
-        gross = (basic + arrears) - absent_deduct
-        
-        # 2. Local Service Tax (LST) - Standard 100k/year for gross > 1m
+        gross = (basic + arrears) - absent
         lst = 100000 / 12 if gross > 1000000 else 0
-
-        # 3. NSSF Calculations (5% Employee, 10% Employer)
         n5, n10 = gross * 0.05, gross * 0.10
         n15 = n5 + n10
 
-        # 4. PAYE (Ugandan Pay As You Earn) Logic
         paye = 0
         if gross > 410000:
             paye = 25000 + (0.30 * (gross - 410000))
         elif gross > 235000:
             paye = (gross - 235000) * 0.10
 
-        total_deductions = paye + lst + n5 + advance + other
-        net = gross - total_deductions
+        net = gross - (paye + lst + n5 + advance + other)
 
         return {
             "gross": round(gross),
-            "lst": round(lst),
+            "paye": round(paye),
             "n5": round(n5),
             "n10": round(n10),
             "n15": round(n15),
-            "paye": round(paye),
-            "net": round(net)
+            "net": round(net),
+            "lst": round(lst)
         }
 
-    tab_process, tab_logs = st.tabs(["➕ Process Salary","📜 Payroll History"])
+    # ==============================
+    # 📊 SUMMARY CARDS
+    # ==============================
+    if not df.empty:
+        total_net = df["net_pay"].sum() if "net_pay" in df else 0
+        total_paye = df["paye"].sum() if "paye" in df else 0
+        total_nssf = df["nssf_15"].sum() if "nssf_15" in df else 0
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric("💰 Total Net Payroll", f"UGX {total_net:,.0f}")
+        c2.metric("🏛 PAYE Tax", f"UGX {total_paye:,.0f}")
+        c3.metric("🛡 NSSF (15%)", f"UGX {total_nssf:,.0f}")
+
+    st.divider()
 
     # ==============================
-    # PROCESS TAB
+    # 📑 TABS
     # ==============================
-    with tab_process:
-        with st.form("new_payroll_form", clear_on_submit=True):
+    tab1, tab2 = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger"])
+
+    # ==============================
+    # 💳 PROCESS PAYROLL
+    # ==============================
+    with tab1:
+
+        st.markdown("### 🧾 Salary Processing Engine")
+
+        with st.form("payroll_form", clear_on_submit=True):
+
             name = st.text_input("Employee Name")
 
             c1, c2, c3 = st.columns(3)
-            f_tin = c1.text_input("TIN")
-            f_desig = c2.text_input("Designation")
-            f_mob = c3.text_input("Mob No.")
+            tin = c1.text_input("TIN")
+            role = c2.text_input("Designation")
+            mob = c3.text_input("Phone")
 
             c4, c5 = st.columns(2)
-            f_acc = c4.text_input("Account No.")
-            f_nssf_no = c5.text_input("NSSF No.")
+            acc = c4.text_input("Account No.")
+            nssf = c5.text_input("NSSF No.")
+
+            st.markdown("#### 💵 Salary Inputs")
 
             c6, c7, c8 = st.columns(3)
-            f_arrears = c6.number_input("ARREARS", min_value=0.0)
-            f_basic = c7.number_input("SALARY (Basic)", min_value=0.0)
-            f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
+            arrears = c6.number_input("Arrears")
+            basic = c7.number_input("Basic Salary")
+            absent = c8.number_input("Absent Deduction")
 
             c9, c10 = st.columns(2)
-            f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0)
-            f_other = c10.number_input("Other Deductions", min_value=0.0)
+            advance = c9.number_input("Advance")
+            other = c10.number_input("Other Deductions")
 
-            if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
-                if name and f_basic > 0:
-                    calc = run_manual_sync_calculations(
-                        f_basic, f_arrears, f_absent, f_adv, f_other
-                    )
+            # 🔥 LIVE PREVIEW
+            preview = calc_engine(basic, arrears, absent, advance, other)
 
-                    # FIXED: Keys here match your Supabase columns exactly
-                    new_row = pd.DataFrame([{
+            st.markdown(f"""
+            <div style="padding:15px;border-radius:10px;background:#F8FAFC;margin-top:10px;">
+                <b>💡 Live Salary Breakdown</b><br><br>
+                Gross: UGX {preview['gross']:,} <br>
+                PAYE: UGX {preview['paye']:,} <br>
+                NSSF (5%): UGX {preview['n5']:,} <br>
+                Net Pay: <b>UGX {preview['net']:,}</b>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.form_submit_button("🚀 Process Payroll", use_container_width=True):
+
+                if name and basic > 0:
+
+                    payload = pd.DataFrame([{
                         "employee": name,
-                        "tin": f_tin,
-                        "designation": f_desig,
-                        "mob_no": f_mob,
-                        "account_no": f_acc,
-                        "nssf_no": f_nssf_no,
-                        "arrears": f_arrears,
-                        "basic_salary": f_basic,
-                        "absent_deduction": f_absent,
-                        "gross_salary": calc["gross"],
-                        "lst": calc["lst"],
-                        "paye": calc["paye"],
-                        "nssf_5": calc["n5"],
-                        "nssf_10": calc["n10"],
-                        "nssf_15": calc["n15"],
-                        "advance_drs": f_adv,
-                        "other_deductions": f_other,
-                        "net_pay": calc["net"],
+                        "tin": tin,
+                        "designation": role,
+                        "mob_no": mob,
+                        "account_no": acc,
+                        "nssf_no": nssf,
+                        "arrears": arrears,
+                        "basic_salary": basic,
+                        "absent_deduction": absent,
+                        "gross_salary": preview["gross"],
+                        "paye": preview["paye"],
+                        "nssf_5": preview["n5"],
+                        "nssf_10": preview["n10"],
+                        "nssf_15": preview["n15"],
+                        "advance_drs": advance,
+                        "other_deductions": other,
+                        "net_pay": preview["net"],
+                        "lst": preview["lst"],
                         "date": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": current_tenant
+                        "tenant_id": str(tenant)
                     }])
 
-                    if save_data("payroll", new_row):
-                        st.success(f"✅ Payroll for {name} saved!")
-                        st.cache_data.clear()
+                    if save_data("payroll", payload):
+                        st.success(f"✅ Payroll processed for {name}")
                         st.rerun()
 
+                else:
+                    st.error("Enter valid employee & salary")
+
     # ==============================
-    # LOGS TAB (REPORTS & EXPORT)
+    # 📜 PAYROLL TABLE
     # ==============================
+    with tab2:
+
+        if not df.empty:
+
+            def fm(x):
+                try:
+                    return f"{int(float(x or 0)):,}"
+                except:
+                    return "0"
+
+            rows = ""
+            for i, r in df.iterrows():
+                rows += f"""
+                <tr>
+                    <td>{i+1}</td>
+                    <td><b>{r.get('employee')}</b><br><small>{r.get('designation')}</small></td>
+                    <td style="text-align:right;">{fm(r.get('gross_salary'))}</td>
+                    <td style="text-align:right;">{fm(r.get('paye'))}</td>
+                    <td style="text-align:right;">{fm(r.get('nssf_5'))}</td>
+                    <td style="text-align:right;background:#ECFDF5;font-weight:bold;">{fm(r.get('net_pay'))}</td>
+                </tr>
+                """
+
+            st.markdown(f"""
+            <style>
+            table {{
+                width:100%;
+                border-collapse:collapse;
+                font-size:13px;
+            }}
+            th {{
+                background:{brand_color};
+                color:white;
+                padding:10px;
+                text-align:left;
+            }}
+            td {{
+                padding:10px;
+                border-bottom:1px solid #eee;
+            }}
+            tr:hover {{
+                background:#f9fafb;
+            }}
+            </style>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Employee</th>
+                        <th>Gross</th>
+                        <th>PAYE</th>
+                        <th>NSSF</th>
+                        <th>Net</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows}
+                </tbody>
+            </table>
+            """, unsafe_allow_html=True)
+
+        else:
+            st.info("No payroll records yet.")
     with tab_logs:
         if not df.empty:
             def fm(x):
