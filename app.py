@@ -55,8 +55,87 @@ SESSION_TIMEOUT = 30
 # 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
 def apply_master_theme():
-    brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f""" ... """, unsafe_allow_html=True)
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+
+    st.markdown(f"""
+    <style>
+
+    /* ===== GLOBAL APP ===== */
+    .stApp {{
+        background: linear-gradient(135deg, #f5f7fb, #eef2f7);
+        font-family: 'Segoe UI', sans-serif;
+    }}
+
+    /* ===== SIDEBAR (GRADIENT FINTECH STYLE) ===== */
+    [data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, {brand_color}, #0f172a) !important;
+        padding-top: 20px;
+    }}
+
+    [data-testid="stSidebar"] * {{
+        color: white !important;
+    }}
+
+    /* Sidebar buttons */
+    [data-testid="stSidebar"] button {{
+        background: rgba(255,255,255,0.1) !important;
+        border: none !important;
+        border-radius: 10px !important;
+        backdrop-filter: blur(10px);
+    }}
+
+    /* ===== CARDS (GLASS STYLE) ===== */
+    .glass-card {{
+        background: rgba(255,255,255,0.7);
+        backdrop-filter: blur(10px);
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }}
+
+    /* ===== METRICS ===== */
+    div[data-testid="stMetric"] {{
+        background: white;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
+    }}
+
+    div[data-testid="stMetricValue"] {{
+        font-size: 28px !important;
+        font-weight: bold;
+        color: {brand_color};
+    }}
+
+    /* ===== BUTTONS ===== */
+    .stButton>button {{
+        background: linear-gradient(135deg, {brand_color}, #3b82f6);
+        color: white;
+        border-radius: 10px;
+        border: none;
+        padding: 10px 18px;
+        font-weight: 600;
+    }}
+
+    .stButton>button:hover {{
+        transform: translateY(-1px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    }}
+
+    /* ===== TABLE ===== */
+    .stDataFrame {{
+        border-radius: 12px;
+        overflow: hidden;
+    }}
+
+    /* ===== INPUTS ===== */
+    input, textarea {{
+        border-radius: 8px !important;
+    }}
+
+    </style>
+    """, unsafe_allow_html=True)
 
 
 # ==============================
@@ -434,13 +513,13 @@ def run_auth_ui(supabase):
             st.rerun()
 
 def render_sidebar():
-    """
-    ENTERPRISE MULTI-TENANT SIDEBAR (UPGRADED SAFELY)
-    - No logic removed
-    - Tenant switching hardened
-    - Logo system fixed
-    - Navigation state stabilized
-    """
+    st.sidebar.markdown(f"""
+<div style="text-align:center; padding:15px;">
+    <h2 style="color:white;">💰</h2>
+    <h3 style="margin:0;">{st.session_state.get('company_name','ZOE CONSULTS')}</h3>
+    <p style="font-size:12px; opacity:0.7;">Finance Core</p>
+</div>
+""", unsafe_allow_html=True)
 
     # ==============================
     # 1. FETCH TENANTS (SAFE + ROBUST)
