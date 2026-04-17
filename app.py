@@ -576,7 +576,7 @@ def render_sidebar():
             st.stop()
 
         # ==============================
-        # 💎 PRO BRAND BLOCK (ELITE - SYNCHRONIZED)
+        # 💎 PRO BRAND BLOCK (ELITE - SYNCHRONIZED + HTML FIXED)
         # ==============================
         import time
 
@@ -597,6 +597,7 @@ def render_sidebar():
         # Logic for creating the logo HTML string
         logo_html = ""
         if final_logo_url:
+            # Notice the double braces {{ }} around the CSS styles
             logo_html = f"""
             <div style="
                 display:inline-block;
@@ -615,7 +616,8 @@ def render_sidebar():
         total_loans = len(st.session_state.get('loans_df', []))
         total_clients = len(st.session_state.get('borrowers_df', []))
 
-        # Render the entire Elite Brand Block in one clean Markdown call
+        # Render the entire Elite Brand Block
+        # ALL CSS curly braces below are now doubled to avoid Python KeyErrors
         st.markdown(f"""
         <div style="text-align:center; margin-top:10px;">
 
