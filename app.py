@@ -2873,7 +2873,6 @@ def show_payroll():
                 st.components.v1.html("<script>window.print();</script>", height=0)
 
             st.components.v1.html(full_html, height=600, scrolling=True)
-
             st.write("---")
             with st.expander("⚙️ Manage Record"):
                 if not df.empty:
