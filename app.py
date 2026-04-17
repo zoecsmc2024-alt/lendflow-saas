@@ -66,23 +66,42 @@ def apply_master_theme():
         border: none !important;
         font-weight: 500;
     }}
-    
-    /* RADIO BUTTON FIX */
+
+    /* 🔥 FIX NAV TEXT VISIBILITY */
     div[role="radiogroup"] label {{
+        color: rgba(255,255,255,0.95) !important;
+        font-weight: 500 !important;
+    }}
+
+    /* 🔥 FIX ICON + TEXT ROW */
+    div[role="radiogroup"] label span {{
+        color: rgba(255,255,255,0.95) !important;
+    }}
+
+    /* 🔥 INACTIVE ITEMS (slightly dim but visible) */
+    div[role="radiogroup"] label {{
+        opacity: 0.85;
         padding: 10px !important;
         border-radius: 10px;
         transition: 0.2s ease;
     }}
 
+    /* 🔥 ACTIVE ITEM (FULL BRIGHT + GLOW) */
+    div[role="radiogroup"] input:checked + div {{
+        opacity: 1 !important;
+        color: #ffffff !important;
+        background: rgba(255,255,255,0.18) !important;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    }}
+
+    div[role="radiogroup"] label div {{
+        color: white !important;
+    }}
+
     /* HOVER */
     div[role="radiogroup"] label:hover {{
         background: rgba(255,255,255,0.08);
-    }}
-
-    /* ACTIVE ITEM */
-    div[role="radiogroup"] input:checked + div {{
-        background: rgba(255,255,255,0.15) !important;
-        border-radius: 10px;
     }}
 
     /* SIDEBAR BACKGROUND (GRADIENT) */
@@ -100,13 +119,6 @@ def apply_master_theme():
         color: white !important;
         font-size: 15px !important;
         font-weight: 500 !important;
-    }}
-
-    /* ACTIVE NAV ITEM */
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label[data-baseweb="radio"] > div:first-child {{
-        background-color: rgba(255,255,255,0.15) !important;
-        border-radius: 10px;
-        padding: 8px;
     }}
 
     /* BUTTONS */
