@@ -182,13 +182,13 @@ def get_cached_data(table_name):
     except Exception as e:
         print(f"[DATA ERROR] {table_name}: {e}")  # avoids UI spam
         return []
-def safe_numeric_column(df, col, default=0.0):
-    if col in df.columns:
-        series = pd.to_numeric(df[col], errors="coerce")
+def safe_numeric(df, col, default=0.0):
+    if isinstance(df, pd.DataFrame) and col in df.columns:
+        s = pd.to_numeric(df[col], errors="coerce")
     else:
-        series = pd.Series([default] * len(df))
+        s = pd.Series([default] * len(df))
 
-    return series.fillna(default)
+    return s.fillna(default)
 
 # ==============================
 # 3. MULTI-TENANT SESSION CORE
