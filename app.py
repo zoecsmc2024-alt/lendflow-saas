@@ -967,8 +967,8 @@ def show_borrowers():
         </table>
         </div>
         """, unsafe_allow_html=True)
-        else:
-            st.info("No borrower records found.")
+     else:
+        st.info("No borrower records found.")
 
 
     # ==============================
