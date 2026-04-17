@@ -711,39 +711,35 @@ with st.sidebar:
         label_visibility="collapsed",
         key="navigation_radio"
     )
+    
     st.markdown("<br>", unsafe_allow_html=True)
-        # ==============================
-        # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
-        # ==============================
+
+    # ==============================
+    # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
+    # ==============================
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+
+    if st.button("🚪 Logout", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            if key not in ["theme_color"]:
+                del st.session_state[key]
         
-        # Add spacing above the button using markdown
-        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        try:
+            st.rerun()
+        except:
+            pass
 
-        # The button must be indented to stay inside the 'with st.sidebar' block
-        if st.button("🚪 Logout", use_container_width=True):
-            # Clear session state except for persistent UI settings
-            for key in list(st.session_state.keys()):
-                if key not in ["theme_color"]:
-                    del st.session_state[key]
-            
-            # Use try-except for rerun to handle edge cases in some Streamlit versions
-            try:
-                st.rerun()
-            except:
-                pass
+# ==============================
+# 🎯 PAGE RESOLUTION
+# ==============================
+try:
+    final_page = selection.split(" ", 1)[1]
+except:
+    final_page = "Overview"
 
-    # ==============================
-    # 🎯 PAGE RESOLUTION
-    # ==============================
-    try:
-        # Extract the page name from the selection (e.g., "📈 Overview" -> "Overview")
-        final_page = selection.split(" ", 1)[1]
-    except:
-        final_page = "Overview"
+st.session_state['current_page'] = final_page
 
-    st.session_state['current_page'] = final_page
-
-    return final_page
+return final_page
         
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE (SAAS + DEBUG FIXED + ENTERPRISE UPGRADE)
