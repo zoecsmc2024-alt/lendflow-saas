@@ -770,16 +770,12 @@ def show_borrowers():
 
     def safe_numeric(df, col, default=0.0):
         """Standardizes columns to numeric Series, handling missing data safely."""
-        # Check if the input is valid
         if not isinstance(df, pd.DataFrame) or df.empty:
             return pd.Series(dtype="float64")
-
-        # Process the column or create a default series
         if col in df.columns:
             s = pd.to_numeric(df[col], errors="coerce")
         else:
             s = pd.Series([default] * len(df), index=df.index)
-
         return s.fillna(default)
 
     def force_series(x, length=0, default=0):
@@ -814,18 +810,17 @@ def show_borrowers():
     # ==============================
     # 🔥 LOAN ENGINE (LINKED)
     # ==============================
+    risk_map = {}
     if not loans_df.empty:
-
         loans_df["balance"] = safe_numeric(loans_df, "balance")
         loans_df["due_date"] = pd.to_datetime(loans_df.get("due_date"), errors="coerce")
 
         today = pd.Timestamp.today()
-
         loans_df["days_overdue"] = (today - loans_df["due_date"]).dt.days
         loans_df["days_overdue"] = loans_df["days_overdue"].apply(lambda x: x if x > 0 else 0)
         loans_df["is_overdue"] = (loans_df["days_overdue"] > 0) & (loans_df["balance"] > 0)
 
-        # Aggregate by borrower_id (CRITICAL FIX)
+        # Aggregate by borrower_id
         risk_df = loans_df.groupby("borrower_id").agg({
             "balance": "sum",
             "is_overdue": "sum",
@@ -839,37 +834,27 @@ def show_borrowers():
         }, inplace=True)
 
         def classify(row):
-            if row["overdue_loans"] == 0:
-                return "🟢 Healthy"
-            elif row["max_days"] <= 7:
-                return "🟡 Watch"
-            elif row["max_days"] <= 30:
-                return "🟠 Risk"
-            else:
-                return "🔴 Critical"
+            if row["overdue_loans"] == 0: return "🟢 Healthy"
+            elif row["max_days"] <= 7: return "🟡 Watch"
+            elif row["max_days"] <= 30: return "🟠 Risk"
+            else: return "🔴 Critical"
 
         risk_df["risk"] = risk_df.apply(classify, axis=1)
-
         risk_map = risk_df.set_index("borrower_id").to_dict("index")
 
-    else:
-        risk_map = {}
+    # ==============================
+    # 📑 UI TABS
+    # ==============================
+    tab_view, tab_add = st.tabs(["📋 View Borrowers", "➕ Add Borrower"])
 
-        # --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
             st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            
-            # Row 1
             name = c1.text_input("Full Name*")
             phone = c2.text_input("Phone Number*")
-            
-            # Row 2
             email = c1.text_input("Email Address")
             nid = c2.text_input("National ID / NIN")
-            
-            # Row 3
             addr = c1.text_input("Physical Address")
             nok = c2.text_input("Next of Kin (Name & Contact)")
             
@@ -877,104 +862,69 @@ def show_borrowers():
                 if name and phone:
                     new_id = str(uuid.uuid4())
                     t_id = st.session_state.get('tenant_id', 'test-tenant-123')
-                    
                     new_entry = pd.DataFrame([{
-                        "id": new_id, 
-                        "name": name, 
-                        "phone": phone, 
-                        "email": email,
-                        "national_id": nid, 
-                        "address": addr, 
-                        "next_of_kin": nok,
-                        "status": "Active",
-                        "tenant_id": t_id 
+                        "id": new_id, "name": name, "phone": phone, "email": email,
+                        "national_id": nid, "address": addr, "next_of_kin": nok,
+                        "status": "Active", "tenant_id": t_id 
                     }])
-                    
                     if save_data("borrowers", new_entry):
                         st.success(f"✅ {name} registered!")
                         st.rerun()
                 else:
                     st.error("⚠️ Please fill in Name and Phone Number.")
 
-    # ==============================
-    # 🔍 SEARCH
-    # ==============================
-    search = st.text_input("🔍 Search name / phone").lower()
+    with tab_view:
+        # ==============================
+        # 🔍 SEARCH
+        # ==============================
+        search = st.text_input("🔍 Search name / phone").lower()
 
-    # ==============================
-    # 📊 TABLE VIEW (BANKING STYLE)
-    # ==============================
-    if not borrowers_df.empty:
+        # ==============================
+        # 📊 TABLE VIEW
+        # ==============================
+        if not borrowers_df.empty:
+            df_to_show = borrowers_df.copy()
+            df_to_show["name"] = df_to_show["name"].astype(str)
+            df_to_show["phone"] = df_to_show["phone"].astype(str)
 
-        df = borrowers_df.copy()
+            mask = (
+                df_to_show["name"].str.lower().str.contains(search, na=False) |
+                df_to_show["phone"].str.contains(search, na=False)
+            )
+            filtered_df = df_to_show[mask]
 
-        df["name"] = df["name"].astype(str)
-        df["phone"] = df["phone"].astype(str)
-
-        mask = (
-            df["name"].str.lower().str.contains(search, na=False) |
-            df["phone"].str.contains(search, na=False)
-        )
-        df = df[mask]
-
-        rows = ""
-
-        for _, r in df.iterrows():
-
-            borrower_id = str(r["id"])
-            name = r["name"]
-            phone = r["phone"]
-            email = r.get("email", "")
-
-            risk = risk_map.get(borrower_id, {})
-            exposure = float(risk.get("exposure", 0) or 0)
-            risk_label = risk.get("risk", "🟢 Healthy")
-
-            # Color badge
-            if "🔴" in risk_label:
-                color = "#dc2626"
-            elif "🟠" in risk_label:
-                color = "#ea580c"
-            elif "🟡" in risk_label:
-                color = "#f59e0b"
-            else:
-                color = "#16a34a"
-
-            risk_badge = f"""
-            <span style="
-                padding:4px 10px;
-                border-radius:12px;
-                font-size:12px;
-                font-weight:600;
-                background:{color};
-                color:white;">
-                {risk_label}
-            </span>
-            """
-
-            rows_html = ""
+            if not filtered_df.empty:
+                rows_html = ""
                 for i, r in filtered_df.reset_index().iterrows():
                     bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                    b_id = str(r.get("id", ""))
                     
-                    # Safely grab values using .get() to prevent 'KeyError' crashes
-                    name_val = r.get(name_col, 'Unknown')
-                    phone_val = r.get(phone_col, 'N/A')
-                    email_val = r.get('email', 'N/A')
-                    nok_val = r.get('next_of_kin', 'N/A')
-                    stat_val = r.get(status_col, 'Active')
+                    # Risk Logic
+                    risk = risk_map.get(b_id, {})
+                    risk_label = risk.get("risk", "🟢 Healthy")
                     
+                    if "🔴" in risk_label: color = "#dc2626"
+                    elif "🟠" in risk_label: color = "#ea580c"
+                    elif "🟡" in risk_label: color = "#f59e0b"
+                    else: color = "#16a34a"
+
                     rows_html += f"""
                     <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
-                        <td style="padding:12px;"><b>{name_val}</b></td>
-                        <td style="padding:12px;">{phone_val}</td>
-                        <td style="padding:12px;">{email_val}</td>
-                        <td style="padding:12px;">{nok_val}</td>
+                        <td style="padding:12px;"><b>{r.get('name', 'Unknown')}</b></td>
+                        <td style="padding:12px;">{r.get('phone', 'N/A')}</td>
+                        <td style="padding:12px;">{r.get('email', 'N/A')}</td>
+                        <td style="padding:12px;">
+                            <span style="background:{color}; color:white; padding:3px 8px; border-radius:12px; font-size:11px;">
+                                {risk_label}
+                            </span>
+                        </td>
                         <td style="padding:12px; text-align:center;">
-                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{stat_val}</span>
+                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">
+                                {r.get('status', 'Active')}
+                            </span>
                         </td>
                     </tr>"""
-                
-                # Render the table
+
                 st.markdown(f"""
                 <div style='border:2px solid {brand_color}33; border-radius:10px; overflow:hidden; margin-top:20px;'>
                     <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
@@ -983,7 +933,7 @@ def show_borrowers():
                                 <th style='padding:12px;'>Borrower Name</th>
                                 <th style='padding:12px;'>Phone</th>
                                 <th style='padding:12px;'>Email</th>
-                                <th style='padding:12px;'>Next of Kin</th>
+                                <th style='padding:12px;'>Risk Status</th>
                                 <th style='padding:12px; text-align:center;'>Status</th>
                             </tr>
                         </thead>
@@ -994,7 +944,6 @@ def show_borrowers():
                 st.info("No borrowers found matching your search.")
         else:
             st.info("No borrowers registered yet.")
-
     # ==============================
     # 👤 BORROWER PROFILE PANEL
     # ==============================
