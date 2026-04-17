@@ -665,29 +665,7 @@ def render_sidebar():
                 display:flex;
                 gap:8px;
                 margin-top:12px;
-            ">
-                <div style="
-                    flex:1;
-                    background:rgba(255,255,255,0.08);
-                    padding:8px 4px;
-                    border-radius:10px;
-                    color:white;
-                    border:1px solid rgba(255,255,255,0.08);
-                ">
-                    <div style="font-size:13px; font-weight:600;">💵 {total_loans}</div>
-                    <div style="font-size:8px; opacity:0.6;">LOANS</div>
-                </div>
-                <div style="
-                    flex:1;
-                    background:rgba(255,255,255,0.08);
-                    padding:8px 4px;
-                    border-radius:10px;
-                    color:white;
-                    border:1px solid rgba(255,255,255,0.08);
-                ">
-                    <div style="font-size:13px; font-weight:600;">👥 {total_clients}</div>
-                    <div style="font-size:8px; opacity:0.6;">CLIENTS</div>
-                </div>
+            
             </div>
         </div>
         """, unsafe_allow_html=True)
