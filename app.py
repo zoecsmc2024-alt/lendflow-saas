@@ -1056,25 +1056,34 @@ def show_loans():
     # 🔥 DATA STANDARDIZATION (CRITICAL)
     # ==============================
 
+    # Ensure ID is string for matching
     loans_df["id"] = loans_df["id"].astype(str)
 
+    # 1. Clean all numeric columns first
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
         if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
+            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+        else:
+            loans_df[col] = 0.0
 
+    # 2. Force Recalculate Balance (Mathematical Truth)
+    # This ensures the UI always shows the actual remaining debt
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
-    # Status normalization
+    # 3. Status normalization
     loans_df["status"] = loans_df["status"].astype(str).str.upper()
 
+    # 4. Auto-Close fully paid loans
     closed_mask = loans_df["balance"] <= 0
     loans_df.loc[closed_mask, "status"] = "CLOSED"
     loans_df.loc[closed_mask, "balance"] = 0
 
-    # Borrower Mapping (FOR PAYMENT PAGE COMPATIBILITY)
+    # 5. Borrower Mapping (FOR PAYMENT PAGE COMPATIBILITY)
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
-        bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df['name']))
+        # Standardize borrower IDs to strings to ensure the dictionary map works
+        borrowers_df['id'] = borrowers_df['id'].astype(str)
+        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
         loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
     else:
         loans_df['borrower'] = loans_df.get('borrower', "Unknown")
