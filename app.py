@@ -379,6 +379,10 @@ def authenticate(supabase, company_code, email, password):
             "role": record.get("role", "Staff"),
             "company": tenant_info.get("name")
         }
+        if st.session_state.get("role") == "Admin":
+            if st.button("👑 Manage Invites"):
+                st.session_state["view"] = "admin_invites"
+                st.rerun()
 
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -566,6 +570,107 @@ def create_company_signup(supabase):
 
 
 # ==============================
+# 👑 ADMIN INVITE DASHBOARD
+# ==============================
+def admin_invite_dashboard(supabase):
+    st.markdown("### 👑 Invite Team Members")
+    st.caption("Create secure invite links for your staff")
+
+    tenant_id = st.session_state.get("tenant_id")
+
+    if not tenant_id:
+        st.error("No tenant found")
+        return
+
+    # ==============================
+    # 🔐 GENERATE NEW INVITE
+    # ==============================
+    with st.expander("➕ Create Invite Link", expanded=True):
+
+        invite_email = st.text_input("Optional: Restrict to Email")
+
+        if st.button("🔗 Generate Invite Link", use_container_width=True):
+
+            try:
+                token = generate_invite_token()
+
+                supabase.table("invites").insert({
+                    "tenant_id": tenant_id,
+                    "token": token,
+                    "email": invite_email if invite_email else None,
+                    "used": False,
+                    "created_at": datetime.now().isoformat()
+                }).execute()
+
+                invite_link = f"http://localhost:8501/?invite={token}"
+
+                st.success("✅ Invite created!")
+                st.code(invite_link)
+
+                st.info("Share this link with your team")
+
+            except Exception as e:
+                st.error(str(e))
+
+    # ==============================
+    # 📊 VIEW INVITES
+    # ==============================
+    st.markdown("### 📋 Active Invites")
+
+    try:
+        invites = supabase.table("invites")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .order("created_at", desc=True)\
+            .execute().data
+
+        if not invites:
+            st.info("No invites yet")
+            return
+
+        for invite in invites:
+            token = invite["token"]
+            used = invite["used"]
+            email = invite.get("email")
+            created = invite.get("created_at")
+
+            invite_link = f"http://localhost:8501/?invite={token}"
+
+            with st.container():
+                col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
+
+                with col1:
+                    st.code(invite_link)
+
+                with col2:
+                    if used:
+                        st.success("Used")
+                    else:
+                        st.warning("Active")
+
+                with col3:
+                    st.caption(email if email else "Open Invite")
+                    st.caption(created)
+
+                with col4:
+                    if not used:
+                        if st.button("❌ Revoke", key=f"revoke_{token}"):
+
+                            supabase.table("invites")\
+                                .delete()\
+                                .eq("token", token)\
+                                .execute()
+
+                            st.warning("Invite revoked")
+                            st.rerun()
+
+        st.markdown("---")
+
+    except Exception as e:
+        st.error(str(e))
+
+
+# ==============================
 # 👥 STAFF SIGNUP (JOIN COMPANY)
 # ==============================
 def signup_page(supabase):
@@ -608,13 +713,14 @@ def signup_page(supabase):
 
             try:
                 tenant = None
+                invite = None
 
                 # ==============================
                 # 🆕 JOIN VIA INVITE TOKEN
                 # ==============================
                 if invite_token:
                     invite_res = supabase.table("invites")\
-                        .select("tenant_id, used")\
+                        .select("tenant_id, used, email")\
                         .eq("token", invite_token)\
                         .execute()
 
@@ -626,6 +732,10 @@ def signup_page(supabase):
 
                     if invite["used"]:
                         st.error("Invite already used")
+                        return
+
+                    if invite.get("email") and invite["email"] != email:
+                        st.error("This invite is restricted to another email")
                         return
 
                     tenant = {"id": invite["tenant_id"]}
@@ -755,6 +865,9 @@ def run_auth_ui(supabase):
 
     elif st.session_state["view"] == "create_company":
         create_company_signup(supabase)
+
+    elif st.session_state["view"] == "admin_invites":
+    admin_invite_dashboard(supabase)
 
     elif st.session_state["view"] == "forgot_password":
         st.markdown("### 🔑 Reset Password")
